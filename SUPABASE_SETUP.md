@@ -62,9 +62,9 @@ This serves the existing browser app locally; it is not a separate application b
 
 ## 6. Deploy to Vercel
 
-1. Push the repository to GitHub and import it into Vercel. Leave the framework preset as **Other** and leave the build command and output directory empty; the site files are served from the repository root.
+1. Push the repository to GitHub and import it into Vercel. Use the **Other** framework preset. `vercel.json` configures the build command and `dist` output directory; do not override them in the Vercel dashboard.
 2. In Vercel, open **Project Settings → Environment Variables** and add `SUPABASE_URL` (the project base URL, without `/rest/v1`) and `SUPABASE_ANON_KEY` (the public anon key). Add them for Production and Preview as needed. Do not add the service-role key.
-3. Deploy or redeploy. Vercel's `/api/supabase-config` function supplies the browser config at `/supabase-config.js`; the rewrite is in `vercel.json`.
+3. Deploy or redeploy. The build copies only browser assets into `dist/`, so browser scripts such as `app.js` are served as static files instead of being run by Node. Vercel's `/api/supabase-config` function supplies the browser config at `/supabase-config.js`; the rewrite is in `vercel.json`.
 4. In Supabase **Authentication → URL Configuration**, set the deployed site URL and add the Vercel production domain and any Preview domains you will use to the allowed redirect URLs.
 5. Open the deployed site and verify sign-up/login and database reads. If the config endpoint returns an error, check that both Vercel environment variables are set and redeploy after changing them.
 

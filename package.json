@@ -4,6 +4,7 @@
   "private": true,
   "description": "Nexovanta local static web app server",
   "scripts": {
+    "build": "node build.js",
     "start": "node server.js",
     "dev": "node server.js"
   },
