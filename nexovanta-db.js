@@ -24,6 +24,316 @@ const NexovantaDB = (() => {
     SEEDED:        'nx_seeded_v5',
   };
 
+  const RECORD_KEYS = [
+    KEYS.POSTS, KEYS.COMMENTS, KEYS.REACTIONS, KEYS.EVENTS, KEYS.EVENT_RSVPS,
+    KEYS.SAVED_POSTS, KEYS.NOTIFICATIONS, KEYS.REPORTS, KEYS.NEWS,
+    'nexovanta_shops_db', 'nexovanta_products_db', 'nexovanta_orders_db',
+    'nexovanta_reviews_db', 'nexovanta_wishlist_db',
+  ];
+  const OWNER_FIELDS = {
+    [KEYS.POSTS]: 'author_id',
+    [KEYS.COMMENTS]: 'author_id',
+    [KEYS.REACTIONS]: 'user_id',
+    [KEYS.EVENTS]: 'organiser_id',
+    [KEYS.EVENT_RSVPS]: 'user_id',
+    [KEYS.SAVED_POSTS]: 'user_id',
+    [KEYS.NOTIFICATIONS]: 'recipient_id',
+    [KEYS.REPORTS]: 'reporter_id',
+    [KEYS.NEWS]: 'author_id',
+    nexovanta_shops_db: 'owner_id',
+    nexovanta_reviews_db: 'author_id',
+    nexovanta_wishlist_db: 'user_id',
+  };
+  const supabase = window.NexovantaSupabase || null;
+  const remoteSnapshots = new Map();
+  const pendingWrites = new Map();
+  const LEGACY_BACKUP_KEY = 'nx_legacy_migration_backup_v1';
+  let activeAuthUserId = null;
+  let activeProfileId = null;
+  let cloudReady = false;
+  let bannerShown = false;
+
+  function showDatabaseMessage(message) {
+    console.error('Nexovanta database:', message);
+    if (bannerShown || !document.body) return;
+    bannerShown = true;
+    const banner = document.createElement('div');
+    banner.setAttribute('role', 'status');
+    banner.style.cssText = 'position:fixed;z-index:99999;left:16px;right:16px;bottom:16px;padding:12px 16px;border-radius:10px;background:#7f1d1d;color:#fff;font:14px/1.45 system-ui,sans-serif;box-shadow:0 8px 30px #0008';
+    banner.textContent = message;
+    document.body.appendChild(banner);
+  }
+
+  function getRecordOwner(collection, record) {
+    const ownerField = OWNER_FIELDS[collection];
+    if (ownerField) return record[ownerField] || null;
+    if (collection === 'nexovanta_products_db') {
+      const shops = readAll('nexovanta_shops_db');
+      const shop = shops.find(item => item.id === record.shop_id);
+      return shop ? shop.owner_id || null : null;
+    }
+    return null;
+  }
+
+  function filterLocalRecords(collection, records) {
+    if (!activeProfileId) return records;
+    const session = Session.get();
+    const isModerator = session && ['admin', 'moderator'].includes(session.account_role);
+    if (collection === KEYS.NOTIFICATIONS) {
+      return records.filter(record => record.recipient_id === activeProfileId);
+    }
+    if (collection === KEYS.REPORTS) {
+      return records.filter(record => isModerator || record.reporter_id === activeProfileId);
+    }
+    if (collection === KEYS.SAVED_POSTS) {
+      return records.filter(record => record.user_id === activeProfileId);
+    }
+    if (collection === 'nexovanta_orders_db') {
+      const ownedShopIds = new Set(readAll('nexovanta_shops_db')
+        .filter(shop => shop.owner_id === activeProfileId)
+        .map(shop => shop.id));
+      return records.filter(record => record.customer_id === activeProfileId || ownedShopIds.has(record.shop_id));
+    }
+    return records;
+  }
+
+  function recordCanBeWritten(collection, record) {
+    const session = Session.get();
+    if (session && ['admin', 'moderator'].includes(session.account_role)) return true;
+    if (collection === 'nexovanta_orders_db') return true;
+    if (collection === KEYS.NOTIFICATIONS) {
+      return !!session && record.actor_username === session.username;
+    }
+    return !!activeProfileId && String(getRecordOwner(collection, record)) === String(activeProfileId);
+  }
+
+  function syncCollection(collection, records) {
+    if (collection === 'nexovanta_wishlist_db') {
+      const session = Session.get();
+      if (!session) {
+        localStorage.setItem(collection, JSON.stringify(records));
+        return Promise.resolve();
+      }
+      const cacheKey = `${collection}_${session.id}`;
+      const previous = readAll(cacheKey);
+      localStorage.setItem(cacheKey, JSON.stringify(records));
+      const toCloudRows = items => (items || []).map(productId => ({
+        id: `${session.id}_${productId}`,
+        product_id: productId,
+        user_id: session.id,
+      }));
+      return queueCollectionWrite(collection, toCloudRows(records), toCloudRows(previous));
+    }
+    const previous = readAll(collection);
+    localStorage.setItem(collection, JSON.stringify(records));
+    return queueCollectionWrite(collection, records, previous);
+  }
+
+  function queueCollectionWrite(key, data, previousRecords) {
+    if (!cloudReady || !supabase) return;
+    const previous = pendingWrites.get(key) || Promise.resolve();
+    const next = previous
+      .catch(() => {})
+      .then(() => persistCollection(key, data, previousRecords))
+      .catch(error => showDatabaseMessage(`Could not save ${key} to Supabase: ${error.message || error}`));
+    pendingWrites.set(key, next);
+  }
+
+  async function persistCollection(collection, records, previousRecords) {
+    const snapshot = remoteSnapshots.get(collection) || new Map();
+    const current = new Map((records || []).filter(row => row && row.id).map(row => [String(row.id), row]));
+    const previous = new Map((previousRecords || []).filter(row => row && row.id).map(row => [String(row.id), row]));
+    const changed = [];
+    current.forEach((record, recordId) => {
+      const oldRecord = previous.get(recordId);
+      if (oldRecord && JSON.stringify(oldRecord) === JSON.stringify(record)) return;
+      if (!recordCanBeWritten(collection, record) &&
+          !(Session.get() && ['admin', 'moderator'].includes(Session.get().account_role))) return;
+      const prior = snapshot.get(recordId);
+      if (prior && JSON.stringify(prior.data) === JSON.stringify(record)) return;
+      changed.push({
+        collection,
+        record_id: recordId,
+        owner_id: getRecordOwner(collection, record),
+        data: record,
+        updated_at: now(),
+      });
+    });
+
+    if (changed.length) {
+      const { error } = await supabase.from('nexovanta_records')
+        .upsert(changed, { onConflict: 'collection,record_id' });
+      if (error) throw error;
+      changed.forEach(row => snapshot.set(row.record_id, { data: row.data, owner_id: row.owner_id }));
+    }
+
+    const removed = [];
+    previous.forEach((oldRecord, recordId) => {
+      if (!current.has(recordId) && recordCanBeWritten(collection, oldRecord)) removed.push(recordId);
+    });
+    if (removed.length) {
+      const { error } = await supabase.from('nexovanta_records')
+        .delete().eq('collection', collection).in('record_id', removed);
+      if (error) throw error;
+      removed.forEach(recordId => snapshot.delete(recordId));
+    }
+    remoteSnapshots.set(collection, snapshot);
+  }
+
+  function writeProfiles(profiles) {
+    if (!cloudReady || !activeProfileId || !supabase) return;
+    const profile = profiles.find(item => item.id === activeProfileId);
+    if (!profile) return;
+    const updates = {
+      username: normalizeUsername(profile.username),
+      full_name: profile.full_name || '',
+      phone: profile.phone || '',
+      avatar_url: profile.avatar_url || null,
+      cover_photo_url: profile.cover_photo_url || null,
+      bio: profile.bio || '',
+      location: profile.location || '',
+      community_category: profile.community_category || 'general',
+      role: profile.role || 'student',
+      privacy_settings: profile.privacy_settings || {},
+      marketplace_shop_id: profile.marketplace_shop_id || null,
+      updated_at: now(),
+    };
+    supabase.from('nexovanta_profiles')
+      .update(updates)
+      .eq('id', activeProfileId)
+      .then(({ error }) => {
+        if (error) showDatabaseMessage(`Could not save your profile to Supabase: ${error.message}`);
+      });
+  }
+
+  async function fetchAllRows(table, columns) {
+    const results = [];
+    const pageSize = 1000;
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await supabase.from(table)
+        .select(columns)
+        .range(offset, offset + pageSize - 1);
+      if (error) throw error;
+      results.push(...(data || []));
+      if (!data || data.length < pageSize) return results;
+    }
+  }
+
+  async function initializeCloud() {
+    if (!supabase) {
+      localStorage.removeItem(KEYS.SESSION);
+      showDatabaseMessage('Supabase is not configured. Nexovanta is using local demo data; remote login and database persistence are unavailable. Add your project URL and anon key to supabase-config.js.');
+      return false;
+    }
+
+    const { data: authData, error: authError } = await supabase.auth.getSession();
+    if (authError) throw authError;
+    activeAuthUserId = authData.session ? authData.session.user.id : null;
+    if (!activeAuthUserId) localStorage.removeItem(KEYS.SESSION);
+    backupLegacyCache();
+
+    const profiles = await fetchAllRows('nexovanta_profiles_public', '*');
+
+    if (activeAuthUserId) {
+      const ownProfile = (profiles || []).find(item => item.auth_user_id === activeAuthUserId || item.id === activeAuthUserId);
+      activeProfileId = ownProfile ? ownProfile.id : activeAuthUserId;
+      const authUser = authData.session.user;
+      const profileRows = readAll(KEYS.USERS);
+      if (ownProfile) {
+        const index = profileRows.findIndex(item => item.id === ownProfile.id);
+        const hydrated = { ...ownProfile, email: authUser.email || '' };
+        if (index === -1) profileRows.push(hydrated);
+        else profileRows[index] = { ...profileRows[index], ...hydrated };
+        localStorage.setItem(KEYS.USERS, JSON.stringify(profileRows));
+        Session.set(hydrated);
+      }
+    }
+
+    function backupLegacyCache() {
+      if (localStorage.getItem(LEGACY_BACKUP_KEY)) return;
+      const profiles = readAll(KEYS.USERS).map(profile => {
+        const safeProfile = { ...profile };
+        delete safeProfile.password_hash;
+        delete safeProfile.password;
+        return safeProfile;
+      });
+      const records = {};
+      RECORD_KEYS.forEach(collection => { records[collection] = readAll(collection); });
+      try {
+        localStorage.setItem(LEGACY_BACKUP_KEY, JSON.stringify({ profiles, records }));
+      } catch (error) {
+        showDatabaseMessage(`Could not preserve a local migration copy: ${error.message || error}. Free browser storage before running the legacy-data migration.`);
+      }
+    }
+
+    const remoteRows = await fetchAllRows('nexovanta_records', 'collection,record_id,owner_id,data');
+
+    const grouped = new Map();
+    (remoteRows || []).forEach(row => {
+      if (!grouped.has(row.collection)) grouped.set(row.collection, []);
+      grouped.get(row.collection).push(row);
+    });
+    RECORD_KEYS.forEach(collection => {
+      const rows = grouped.get(collection) || [];
+      const snapshot = new Map(rows.map(row => [String(row.record_id), {
+        data: row.data,
+        owner_id: row.owner_id,
+      }]));
+      remoteSnapshots.set(collection, snapshot);
+
+      const local = filterLocalRecords(collection, readAll(collection));
+      if (collection === 'nexovanta_wishlist_db') {
+        const cacheKey = activeProfileId ? `${collection}_${activeProfileId}` : collection;
+        const savedList = localStorage.getItem(cacheKey) === null ? readAll(collection) : readAll(cacheKey);
+        const products = new Set(savedList);
+        rows.forEach(row => products.add(row.data.product_id));
+        localStorage.setItem(cacheKey, JSON.stringify(Array.from(products)));
+        if (activeProfileId) localStorage.removeItem(collection);
+        return;
+      }
+      const merged = new Map(local.filter(item => item && item.id).map(item => [String(item.id), item]));
+      rows.forEach(row => merged.set(String(row.record_id), row.data));
+      localStorage.setItem(collection, JSON.stringify(Array.from(merged.values())));
+    });
+
+    const authEmail = authData.session ? authData.session.user.email || '' : '';
+    const localProfiles = readAll(KEYS.USERS).map(profile => ({
+      ...profile,
+      email: profile.id === activeProfileId ? authEmail : '',
+    }));
+    const mergedProfiles = new Map(localProfiles.map(item => [String(item.id), item]));
+    (profiles || []).forEach(item => {
+      const old = mergedProfiles.get(String(item.id)) || {};
+      mergedProfiles.set(String(item.id), { ...old, ...item });
+    });
+    localStorage.setItem(KEYS.USERS, JSON.stringify(Array.from(mergedProfiles.values()).map(profile => ({
+      ...profile,
+      email: profile.id === activeProfileId ? authEmail : '',
+      password_hash: undefined,
+      password: undefined,
+    }))));
+    cloudReady = true;
+    supabase.auth.onAuthStateChange((event, session) => {
+      activeAuthUserId = session ? session.user.id : null;
+      if (event === 'SIGNED_OUT') {
+        activeProfileId = null;
+        localStorage.removeItem(KEYS.SESSION);
+      }
+    });
+    return true;
+  }
+
+  const ready = new Promise(resolve => {
+    document.addEventListener('DOMContentLoaded', () => {
+      initializeCloud()
+        .then(resolve)
+        .catch(error => {
+          showDatabaseMessage(`Supabase initialization failed: ${error.message || error}. Check the setup guide, project settings, and RLS policies.`);
+          resolve(false);
+        });
+    }, { once: true });
+  });
+
   // ─── Utility Helpers ─────────────────────────────────────────────────────────
   function uuid() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -57,7 +367,10 @@ const NexovantaDB = (() => {
   }
 
   function writeAll(key, data) {
+    const previous = readAll(key);
     localStorage.setItem(key, JSON.stringify(data));
+    if (key === KEYS.USERS) writeProfiles(data);
+    else queueCollectionWrite(key, data, previous);
   }
 
   function readObj(key) {
@@ -85,7 +398,11 @@ const NexovantaDB = (() => {
   function isUsernameTaken(username, excludeId = null) {
     const users = readAll(KEYS.USERS);
     const normalized = normalizeUsername(username);
-    return users.some(u => normalizeUsername(u.username) === normalized && u.id !== excludeId);
+    return users.some(u =>
+      !!u.auth_user_id &&
+      normalizeUsername(u.username) === normalized &&
+      u.id !== excludeId
+    );
   }
 
   // ─── Users / Profiles ─────────────────────────────────────────────────────────
@@ -106,51 +423,115 @@ const NexovantaDB = (() => {
       return readAll(KEYS.USERS).find(u => (u.email || '').toLowerCase() === norm) || null;
     },
 
-    create(data) {
-      const users = readAll(KEYS.USERS);
+    async create(data) {
+      if (!supabase) throw new Error('Supabase is not configured. Add the project URL and anon key before creating an account.');
+      const email = (data.email || '').trim().toLowerCase();
+      if (!email || !email.includes('@')) throw new Error('A valid email address is required for Supabase Auth.');
+      const { data: authData, error } = await supabase.auth.signUp({
+        email,
+        password: data.password,
+        options: {
+          data: {
+            username: normalizeUsername(data.username),
+            full_name: data.full_name || '',
+            phone: data.phone || '',
+            role: data.role || 'student',
+            community_category: data.community_category || 'general',
+            bio: data.bio || '',
+            location: data.location || '',
+          },
+        },
+      });
+      if (error) throw error;
+      if (!authData.user) throw new Error('Supabase Auth did not return a user.');
+
+      activeAuthUserId = authData.session ? authData.user.id : null;
+      const { data: profile, error: profileError } = await supabase
+        .from('nexovanta_profiles_public')
+        .select('*')
+        .eq('auth_user_id', authData.user.id)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      activeProfileId = authData.session && profile ? profile.id : null;
       const user = {
-        id: uuid(),
+        ...(profile || {}),
+        id: profile ? profile.id : authData.user.id,
         username: normalizeUsername(data.username),
         full_name: data.full_name || '',
-        email: (data.email || '').toLowerCase(),
+        email,
         phone: data.phone || '',
-        avatar_url: data.avatar_url || null,
-        cover_photo_url: data.cover_photo_url || null,
+        role: data.role || 'student',
+        community_category: data.community_category || 'general',
         bio: data.bio || '',
         location: data.location || '',
-        community_category: data.community_category || 'general',
-        role: data.role || 'student',         // student | business | resident
-        account_role: data.account_role || 'member', // member | moderator | admin
-        privacy_settings: { public_posts: true, show_email: false },
-        password_hash: btoa(data.password || 'password123'), // minimal obfuscation for demo
-        marketplace_shop_id: data.marketplace_shop_id || null, // linked shop for business accounts
-        created_at: now(),
-        updated_at: now(),
+        account_role: 'member',
       };
+      const users = readAll(KEYS.USERS).filter(item => item.id !== user.id);
       users.push(user);
-      writeAll(KEYS.USERS, users);
-      return user;
+      localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+      if (authData.session) Session.set(user);
+      return { user, needsEmailConfirmation: !authData.session };
     },
 
     update(id, changes) {
       const users = readAll(KEYS.USERS);
       const idx = users.findIndex(u => u.id === id);
       if (idx === -1) return null;
-      users[idx] = { ...users[idx], ...changes, updated_at: now() };
+      const safeChanges = { ...changes };
+      delete safeChanges.password;
+      delete safeChanges.password_hash;
+      delete safeChanges.account_role;
+      delete safeChanges.auth_user_id;
+      delete safeChanges.id;
+      users[idx] = { ...users[idx], ...safeChanges, updated_at: now() };
       writeAll(KEYS.USERS, users);
       return users[idx];
     },
 
-    authenticate(identifier, password) {
-      const users = readAll(KEYS.USERS);
-      const norm = (identifier || '').trim().toLowerCase();
-      const user = users.find(u =>
-        normalizeUsername(u.username) === norm ||
-        (u.email || '').toLowerCase() === norm
-      );
-      if (!user) return { success: false, error: 'Invalid credentials.' };
-      if (user.password_hash !== btoa(password)) return { success: false, error: 'Invalid credentials.' };
+    async authenticate(identifier, password) {
+      if (!supabase) return { success: false, error: 'Supabase is not configured. Remote login is unavailable.' };
+      const email = (identifier || '').trim().toLowerCase();
+      if (!email.includes('@')) return { success: false, error: 'Sign in using the email address on your account.' };
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return { success: false, error: 'Invalid email or password.' };
+      activeAuthUserId = data.user.id;
+
+      const { data: profile, error: profileError } = await supabase
+        .from('nexovanta_profiles_public')
+        .select('*')
+        .eq('auth_user_id', data.user.id)
+        .maybeSingle();
+      if (profileError || !profile) {
+        await supabase.auth.signOut();
+        activeAuthUserId = null;
+        return {
+          success: false,
+          error: profileError ? profileError.message : 'Your account profile is missing. Contact the site administrator.',
+        };
+      }
+
+      const user = { ...profile, email: data.user.email || '' };
+      activeProfileId = profile.id;
+      const users = readAll(KEYS.USERS).filter(item => item.id !== user.id);
+      users.push(user);
+      localStorage.setItem(KEYS.USERS, JSON.stringify(users));
       return { success: true, user };
+    },
+
+    async resetPassword(email) {
+      if (!supabase) throw new Error('Supabase is not configured.');
+      const cleanEmail = (email || '').trim().toLowerCase();
+      if (!cleanEmail.includes('@')) throw new Error('Enter the email address on your account first.');
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: `${window.location.origin}${window.location.pathname}?mode=recovery`,
+      });
+      if (error) throw error;
+    },
+
+    async updatePassword(password) {
+      if (!supabase || !activeAuthUserId) throw new Error('Open the password reset link from your email first.');
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
     },
   };
 
@@ -160,8 +541,13 @@ const NexovantaDB = (() => {
       try { return JSON.parse(localStorage.getItem(KEYS.SESSION) || 'null'); } catch { return null; }
     },
     set(user) {
+      if (!user || !activeAuthUserId || String(user.id) !== String(activeProfileId)) {
+        showDatabaseMessage('A valid Supabase Auth session is required. Demo/local profiles cannot create a signed-in session.');
+        return null;
+      }
       const session = {
         id: user.id,
+        auth_user_id: activeAuthUserId,
         username: user.username,
         full_name: user.full_name,
         email: user.email,
@@ -177,7 +563,14 @@ const NexovantaDB = (() => {
       localStorage.setItem(KEYS.SESSION, JSON.stringify(session));
       return session;
     },
-    clear() { localStorage.removeItem(KEYS.SESSION); },
+    clear() {
+      localStorage.removeItem(KEYS.SESSION);
+      activeAuthUserId = null;
+      activeProfileId = null;
+      return supabase ? supabase.auth.signOut().then(({ error }) => {
+        if (error) showDatabaseMessage(`Could not sign out from Supabase: ${error.message}`);
+      }) : Promise.resolve();
+    },
     isLoggedIn() { const s = Session.get(); return !!(s && s.loggedIn && s.id); },
     requireAuth() {
       if (!Session.isLoggedIn()) {
@@ -665,16 +1058,41 @@ const NexovantaDB = (() => {
   }
 
   // ─── Seed Data ────────────────────────────────────────────────────────────────
+  function createSeedProfile(data) {
+    const user = {
+      id: uuid(),
+      username: normalizeUsername(data.username),
+      full_name: data.full_name || '',
+      email: (data.email || '').toLowerCase(),
+      phone: data.phone || '',
+      avatar_url: null,
+      cover_photo_url: null,
+      bio: data.bio || '',
+      location: data.location || '',
+      community_category: data.community_category || 'general',
+      role: data.role || 'student',
+      account_role: data.account_role || 'member',
+      privacy_settings: { public_posts: true, show_email: false },
+      marketplace_shop_id: null,
+      created_at: now(),
+      updated_at: now(),
+    };
+    const users = readAll(KEYS.USERS);
+    users.push(user);
+    localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+    return user;
+  }
+
   function seedData() {
     if (localStorage.getItem(KEYS.SEEDED)) return;
 
     // Demo users
-    const u1 = Users.create({ username: 'chukastudent24', full_name: 'Dennis Munene', email: 'dennis@chuka.ac.ke', phone: '0712345678', role: 'student', community_category: 'campus', bio: 'Computer Science Year 3 @ Chuka University. Tech enthusiast & campus content creator.', location: 'Ndagani, Chuka', password: 'demo1234', account_role: 'member' });
-    const u2 = Users.create({ username: 'ndaganicafe', full_name: 'Ndagani Fresh Cafe & Bakes', email: 'cafe@ndagani.co.ke', phone: '0723456789', role: 'business', community_category: 'business', bio: 'Your favourite campus cafe ☕ Warm mandazis, samosas & fresh juice. 10% student discount daily!', location: 'Ndagani Stage, Chuka', password: 'demo1234', account_role: 'member' });
-    const u3 = Users.create({ username: 'chukaresidents', full_name: 'Elder Peterson Kamau', email: 'peterson@chuka.com', phone: '0734567890', role: 'resident', community_category: 'community', bio: 'Proud Ndagani resident and community leader. Keeping Chuka connected.', location: 'Chuka Town, Tharaka Nithi', password: 'demo1234', account_role: 'member' });
-    const u4 = Users.create({ username: 'amosletela', full_name: 'Amos Letela', email: 'amos@nexovanta.co.ke', phone: '0745678901', role: 'student', community_category: 'campus', bio: 'Frontend Developer & Chuka Uni ICT Student. Building digital Africa 🚀', location: 'Ndagani, Chuka', password: 'demo1234', account_role: 'admin' });
-    const u5 = Users.create({ username: 'tenebo_ict', full_name: 'Tenebo Kariuki', email: 'tenebo@chuka.ac.ke', phone: '0756789012', role: 'student', community_category: 'campus', bio: 'ICT student, blogger, campus photographer 📸', location: 'Chuka University Campus', password: 'demo1234', account_role: 'moderator' });
-    const u6 = Users.create({ username: 'sunrisehostels', full_name: 'Sunrise Executive Hostels', email: 'sunrise@ndagani.co.ke', phone: '0767890123', role: 'business', community_category: 'business', bio: 'Premium student accommodation in Ndagani. 24/7 borehole water, WiFi, security. Best value near Chuka University.', location: 'Ndagani, near Gate A', password: 'demo1234', account_role: 'member' });
+    const u1 = createSeedProfile({ username: 'chukastudent24', full_name: 'Dennis Munene', email: 'dennis@chuka.ac.ke', phone: '0712345678', role: 'student', community_category: 'campus', bio: 'Computer Science Year 3 @ Chuka University. Tech enthusiast & campus content creator.', location: 'Ndagani, Chuka', account_role: 'member' });
+    const u2 = createSeedProfile({ username: 'ndaganicafe', full_name: 'Ndagani Fresh Cafe & Bakes', email: 'cafe@ndagani.co.ke', phone: '0723456789', role: 'business', community_category: 'business', bio: 'Your favourite campus cafe ☕ Warm mandazis, samosas & fresh juice. 10% student discount daily!', location: 'Ndagani Stage, Chuka', account_role: 'member' });
+    const u3 = createSeedProfile({ username: 'chukaresidents', full_name: 'Elder Peterson Kamau', email: 'peterson@chuka.com', phone: '0734567890', role: 'resident', community_category: 'community', bio: 'Proud Ndagani resident and community leader. Keeping Chuka connected.', location: 'Chuka Town, Tharaka Nithi', account_role: 'member' });
+    const u4 = createSeedProfile({ username: 'amosletela', full_name: 'Amos Letela', email: 'amos@nexovanta.co.ke', phone: '0745678901', role: 'student', community_category: 'campus', bio: 'Frontend Developer & Chuka Uni ICT Student. Building digital Africa 🚀', location: 'Ndagani, Chuka', account_role: 'admin' });
+    const u5 = createSeedProfile({ username: 'tenebo_ict', full_name: 'Tenebo Kariuki', email: 'tenebo@chuka.ac.ke', phone: '0756789012', role: 'student', community_category: 'campus', bio: 'ICT student, blogger, campus photographer 📸', location: 'Chuka University Campus', account_role: 'moderator' });
+    const u6 = createSeedProfile({ username: 'sunrisehostels', full_name: 'Sunrise Executive Hostels', email: 'sunrise@ndagani.co.ke', phone: '0767890123', role: 'business', community_category: 'business', bio: 'Premium student accommodation in Ndagani. 24/7 borehole water, WiFi, security. Best value near Chuka University.', location: 'Ndagani, near Gate A', account_role: 'member' });
 
     // Posts
     const p1 = Posts.create({ author_username: u1.username, author_id: u1.id, content: 'The sunset view over Mount Kenya from the New Science Complex roof terrace this evening was absolutely unreal! Wishing everyone revising for end-of-semester exams all the best. You\'ve got this! 📚✨ #ChukaUni #CampusLife', post_type: 'text', category: 'campus', created_at: minutesAgo(15) });
@@ -749,6 +1167,67 @@ const NexovantaDB = (() => {
     console.log('NexovantaDB: Seed data loaded successfully.');
   }
 
+  async function migrateLocalData() {
+    await ready;
+    if (!supabase || !activeProfileId) throw new Error('Sign in to Supabase before migrating local data.');
+    const backup = readObj(LEGACY_BACKUP_KEY);
+    const profileMap = new Map((backup.profiles || []).map(profile => [String(profile.id), profile]));
+    readAll(KEYS.USERS).forEach(profile => profileMap.set(String(profile.id), profile));
+    const profiles = Array.from(profileMap.values()).map(profile => {
+      const safeProfile = { ...profile };
+      delete safeProfile.password_hash;
+      delete safeProfile.password;
+      return safeProfile;
+    });
+    const records = [];
+    RECORD_KEYS.forEach(collection => {
+      if (collection === 'nexovanta_wishlist_db') {
+        const session = Session.get();
+        if (session) {
+          const cacheKey = `${collection}_${session.id}`;
+          const wishlist = new Set([
+            ...((backup.records && backup.records[collection]) || []),
+            ...(localStorage.getItem(collection) === null ? [] : readAll(collection)),
+            ...(localStorage.getItem(cacheKey) === null ? [] : readAll(cacheKey)),
+          ]);
+          wishlist.forEach(productId => records.push({
+            collection,
+            record_id: `${session.id}_${productId}`,
+            owner_id: session.id,
+            data: { id: `${session.id}_${productId}`, product_id: productId, user_id: session.id },
+          }));
+        }
+        return;
+      }
+      const localMap = new Map();
+      ((backup.records && backup.records[collection]) || []).forEach(record => {
+        if (record && record.id) localMap.set(String(record.id), record);
+      });
+      readAll(collection).forEach(record => {
+        if (record && record.id) localMap.set(String(record.id), record);
+      });
+      localMap.forEach(record => {
+        if (!record || !record.id) return;
+        const safeRecord = { ...record };
+        delete safeRecord.password_hash;
+        delete safeRecord.password;
+        records.push({
+          collection,
+          record_id: String(record.id),
+          owner_id: getRecordOwner(collection, record),
+          data: safeRecord,
+        });
+      });
+    });
+    const { data, error } = await supabase.rpc('nexovanta_migrate_legacy_data', {
+      legacy_profiles: profiles,
+      legacy_records: records,
+    });
+    if (error) throw error;
+    await initializeCloud();
+    return data;
+  }
+
   // ─── Public API ───────────────────────────────────────────────────────────────
   return {
     Users,
@@ -769,8 +1248,22 @@ const NexovantaDB = (() => {
     isUsernameTaken,
     normalizeUsername,
     uuid,
+    ready,
+    migrateLocalData,
+    syncCollection,
+    supabase,
   };
 })();
 
 // Auto-seed on load
 NexovantaDB.seed();
+const cachedUsers = (() => {
+  try { return JSON.parse(localStorage.getItem('nx_users') || '[]'); } catch { return []; }
+})();
+if (cachedUsers.some(user => Object.prototype.hasOwnProperty.call(user, 'password_hash'))) {
+  cachedUsers.forEach(user => {
+    delete user.password_hash;
+    delete user.password;
+  });
+  localStorage.setItem('nx_users', JSON.stringify(cachedUsers));
+}

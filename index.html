@@ -20,6 +20,8 @@
   <link rel="stylesheet" href="styles.css">
 
   <!-- Auth: DB layer must load before guard -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
   <script src="nexovanta-db.js"></script>
   <script src="auth-guard.js"></script>
 </head>
@@ -877,7 +879,6 @@
   </footer>
 
   <!-- NexovantaDB + App Script -->
-  <script src="nexovanta-db.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

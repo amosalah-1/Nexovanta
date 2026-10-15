@@ -3,7 +3,8 @@
  * Main Interactive Application Script
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await NexovantaDB.ready;
   // 1. Video Background Controls
   initVideoControls();
 
@@ -498,32 +499,7 @@ function handleAuthSubmit() {
 }
 
 function performDemoLogin(role) {
-  const usernames = { student: 'chukastudent24', business: 'ndaganicafe', resident: 'chukaresidents' };
-  const un = usernames[role] || 'chukastudent24';
-
-  // Use NexovantaDB if available
-  if (typeof NexovantaDB !== 'undefined') {
-    const user = NexovantaDB.Users.getByUsername(un);
-    if (user) {
-      const session = NexovantaDB.Session.set(user);
-      updateUIForLoggedInUser(session);
-      closeModal();
-      showToast(`Demo Login: @${session.username} — Welcome to Nexovanta!`);
-      return;
-    }
-  }
-
-  // Fallback for pages without NexovantaDB loaded
-  const sampleUsers = {
-    student: { role: 'student', roleTitle: 'Chuka Student 🎓', username: 'chukastudent24', name: 'Dennis Munene', loggedIn: true },
-    business: { role: 'business', roleTitle: 'Chuka Merchant 💼', username: 'ndaganicafe', name: 'Ndagani Cafe', loggedIn: true },
-    resident: { role: 'resident', roleTitle: 'Chuka Resident 🏘️', username: 'chukaresidents', name: 'Elder Peterson', loggedIn: true }
-  };
-  const user = sampleUsers[role] || sampleUsers.student;
-  localStorage.setItem('nexovanta_user', JSON.stringify(user));
-  updateUIForLoggedInUser(user);
-  closeModal();
-  showToast(`Demo Login Successful: Signed in as @${user.username}`);
+  showToast('Demo profiles are sample content only. Create a Supabase account to sign in.');
 }
 
 function checkLoggedState() {
@@ -536,18 +512,6 @@ function checkLoggedState() {
     }
   }
 
-  // Fallback to raw localStorage
-  const saved = localStorage.getItem('nexovanta_user');
-  if (saved) {
-    try {
-      const user = JSON.parse(saved);
-      if (user && (user.name || user.username)) {
-        updateUIForLoggedInUser(user);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }
 }
 
 function updateUIForLoggedInUser(user) {
@@ -595,9 +559,9 @@ function updateUIForLoggedInUser(user) {
 }
 
 // Log out function
-window.logoutNexovanta = function() {
+window.logoutNexovanta = async function() {
   if (typeof NexovantaDB !== 'undefined') {
-    NexovantaDB.Session.clear();
+    await NexovantaDB.Session.clear();
   } else {
     localStorage.removeItem('nexovanta_user');
   }

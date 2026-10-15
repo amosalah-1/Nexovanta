@@ -21,6 +21,8 @@
   <link rel="stylesheet" href="styles.css">
 
   <!-- NexovantaDB -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
   <script src="nexovanta-db.js"></script>
 
   <style>
@@ -314,12 +316,12 @@
           <!-- ======== LOGIN / BOTH ======== -->
           <!-- Primary Identifier: Username or Email (Login) | Email / Reg No (Register) -->
           <div class="auth-form-group">
-            <label class="auth-label" id="primaryIdLabel">Username or Email</label>
+            <label class="auth-label" id="primaryIdLabel">Email Address</label>
             <div class="auth-input-wrap">
               <i class="fa-solid fa-id-badge auth-input-icon"></i>
-              <input type="text" class="auth-input" id="inputPrimaryId"
-                     placeholder="Enter your username or email"
-                     autocomplete="username email"
+              <input type="email" class="auth-input" id="inputPrimaryId"
+                     placeholder="Enter your email address"
+                     autocomplete="email"
                      required>
             </div>
             <div class="field-error" id="primaryIdError"></div>
@@ -424,9 +426,12 @@
     }
 
     // ─── Init ─────────────────────────────────────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
+      await NexovantaDB.ready;
+      const isPasswordRecovery = new URLSearchParams(window.location.search).get('mode') === 'recovery' ||
+        new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery';
       // If already logged in, go to feed (or intended page)
-      if (NexovantaDB.Session.isLoggedIn()) {
+      if (!isPasswordRecovery && NexovantaDB.Session.isLoggedIn()) {
         window.location.href = getReturnUrl();
         return;
       }
@@ -455,9 +460,14 @@
       document.getElementById('inputUsername')?.addEventListener('input', debounce(checkUsername, 400));
 
       // Forgot password
-      document.getElementById('forgotPwLink').addEventListener('click', (e) => {
+      document.getElementById('forgotPwLink').addEventListener('click', async (e) => {
         e.preventDefault();
-        showAuthMessage('success', 'Password reset instructions have been sent to your registered phone/email.');
+        try {
+          await NexovantaDB.Users.resetPassword(document.getElementById('inputPrimaryId').value);
+          showAuthMessage('success', 'If that email belongs to an account, password reset instructions have been sent.');
+        } catch (error) {
+          showAuthMessage('error', error.message);
+        }
       });
 
       // Demo logins
@@ -470,6 +480,7 @@
       document.getElementById('pageAuthForm').addEventListener('submit', handleFormSubmit);
 
       renderFields();
+      if (isPasswordRecovery) setResetMode();
     });
 
     // ─── Role Selection ───────────────────────────────────────────────────────────
@@ -516,6 +527,21 @@
       renderFields();
     }
 
+    function setResetMode() {
+      pageMode = 'reset';
+      document.querySelector('.role-select-box').style.display = 'none';
+      document.querySelector('.auth-mode-tabs').style.display = 'none';
+      ['fullNameGroup', 'usernameGroup', 'phoneGroup', 'pageTermsRow', 'pageRememberRow'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.style.display = 'none';
+      });
+      document.getElementById('inputPrimaryId').closest('.auth-form-group').style.display = 'none';
+      document.getElementById('inputPassword').autocomplete = 'new-password';
+      document.getElementById('confirmPwGroup').style.display = 'block';
+      document.getElementById('pageMainTitle').textContent = 'Choose a new password';
+      document.getElementById('submitBtnText').textContent = 'Update Password';
+    }
+
     // ─── Role-specific fields ─────────────────────────────────────────────────────
     function renderFields() {
       const container = document.getElementById('roleSpecificContainer');
@@ -523,16 +549,18 @@
       const primaryInput = document.getElementById('inputPrimaryId');
 
       if (pageMode === 'login') {
-        primaryLabel.textContent = 'Username or Email';
-        primaryInput.placeholder = 'Enter your username or email';
+        primaryLabel.textContent = 'Email Address';
+        primaryInput.type = 'email';
+        primaryInput.placeholder = 'Enter your email address';
         container.innerHTML = '';
         return;
       }
 
       // Register mode: show role-specific fields
+      primaryLabel.textContent = 'Email Address';
+      primaryInput.type = 'email';
+      primaryInput.placeholder = 'you@example.com';
       if (pageRole === 'student') {
-        primaryLabel.textContent = 'Student Email or Reg Number';
-        primaryInput.placeholder = 'e.g. EB3/12345/23 or student@chuka.ac.ke';
         container.innerHTML = `
           <div class="auth-form-group">
             <label class="auth-label">Faculty / Academic Department</label>
@@ -565,8 +593,8 @@
           </div>
         `;
       } else if (pageRole === 'business') {
-        primaryLabel.textContent = 'Business Email or Phone Number';
-        primaryInput.placeholder = 'e.g. shop@chukabusiness.com or 0712 345 678';
+        primaryLabel.textContent = 'Business Email Address';
+        primaryInput.placeholder = 'shop@example.com';
         container.innerHTML = `
           <div class="auth-form-group">
             <label class="auth-label">Business / Shop Name</label>
@@ -600,8 +628,8 @@
           </div>
         `;
       } else {
-        primaryLabel.textContent = 'Phone Number or Email';
-        primaryInput.placeholder = 'e.g. 0722 123 456 or resident@gmail.com';
+        primaryLabel.textContent = 'Email Address';
+        primaryInput.placeholder = 'you@example.com';
         container.innerHTML = `
           <div class="auth-form-group">
             <label class="auth-label">Area of Residence in Chuka</label>
@@ -681,7 +709,7 @@
     }
 
     // ─── Form Submission ──────────────────────────────────────────────────────────
-    function handleFormSubmit(e) {
+    async function handleFormSubmit(e) {
       e.preventDefault();
       clearErrors();
 
@@ -689,23 +717,30 @@
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-circle-notch btn-spinner"></i> Please wait…';
 
-      setTimeout(() => {
+      try {
         if (pageMode === 'login') {
-          handleLogin();
+          await handleLogin();
+        } else if (pageMode === 'reset') {
+          await handlePasswordReset();
         } else {
-          handleRegister();
+          await handleRegister();
         }
+      } catch (error) {
+        showAuthMessage('error', error.message || 'Authentication failed. Please try again.');
+      } finally {
         btn.disabled = false;
-        btn.innerHTML = `<i class="fa-solid fa-${pageMode === 'login' ? 'right-to-bracket' : 'user-plus'}"></i> <span id="submitBtnText">${pageMode === 'login' ? 'Log In to Nexovanta' : 'Create My Nexovanta Account'}</span>`;
-      }, 600);
+        const buttonIcon = pageMode === 'login' ? 'right-to-bracket' : pageMode === 'reset' ? 'key' : 'user-plus';
+        const buttonText = pageMode === 'login' ? 'Log In to Nexovanta' : pageMode === 'reset' ? 'Update Password' : 'Create My Nexovanta Account';
+        btn.innerHTML = `<i class="fa-solid fa-${buttonIcon}"></i> <span id="submitBtnText">${buttonText}</span>`;
+      }
     }
 
-    function handleLogin() {
+    async function handleLogin() {
       const identifier = document.getElementById('inputPrimaryId').value.trim();
       const password = document.getElementById('inputPassword').value;
 
       if (!identifier) {
-        showFieldError('primaryIdError', 'Please enter your username or email.');
+        showFieldError('primaryIdError', 'Please enter your email address.');
         return;
       }
       if (!password) {
@@ -713,19 +748,40 @@
         return;
       }
 
-      const result = NexovantaDB.Users.authenticate(identifier, password);
+      const result = await NexovantaDB.Users.authenticate(identifier, password);
       if (!result.success) {
-        // Generic error to prevent username/email enumeration
-        showAuthMessage('error', 'Invalid credentials. Please check your username/email and password.');
+        showAuthMessage('error', result.error || 'Invalid email or password.');
         return;
       }
 
       const session = NexovantaDB.Session.set(result.user);
+      if (!session) {
+        showAuthMessage('error', 'The Supabase Auth session could not be established. Please try signing in again.');
+        return;
+      }
       showAuthMessage('success', `Welcome back, @${session.username}! Redirecting…`);
       setTimeout(() => window.location.href = getReturnUrl(), 1200);
     }
 
-    function handleRegister() {
+    async function handlePasswordReset() {
+      const password = document.getElementById('inputPassword').value;
+      const confirmation = document.getElementById('inputConfirmPw').value;
+      if (password.length < 6) {
+        showFieldError('passwordError', 'Password must be at least 6 characters.');
+        return;
+      }
+      if (password !== confirmation) {
+        showFieldError('confirmPwError', 'Passwords do not match.');
+        return;
+      }
+      await NexovantaDB.Users.updatePassword(password);
+      await NexovantaDB.Session.clear();
+      showAuthMessage('success', 'Password updated. Please sign in with your new password.');
+      window.history.replaceState({}, '', window.location.pathname);
+      setTimeout(() => window.location.reload(), 1200);
+    }
+
+    async function handleRegister() {
       const fullName = document.getElementById('inputFullName').value.trim();
       const usernameRaw = document.getElementById('inputUsername').value.trim();
       const identifier = document.getElementById('inputPrimaryId').value.trim();
@@ -738,7 +794,10 @@
       let hasError = false;
 
       if (!identifier) {
-        showFieldError('primaryIdError', pageRole === 'student' ? 'Please enter your student email or reg number.' : 'Please enter your email or phone number.');
+        showFieldError('primaryIdError', 'A valid email address is required for account creation.');
+        hasError = true;
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) {
+        showFieldError('primaryIdError', 'Enter a valid email address. Phone numbers and student IDs cannot be used to sign in.');
         hasError = true;
       }
 
@@ -769,26 +828,28 @@
 
       if (hasError) return;
 
-      // Determine email vs phone
-      const isEmail = identifier.includes('@');
-      const email = isEmail ? identifier : (identifier.includes('chuka') ? identifier + '@chuka.ac.ke' : '');
-      const phoneFinal = !isEmail ? identifier : phone;
-
       // Create user
-      const user = NexovantaDB.Users.create({
+      const result = await NexovantaDB.Users.create({
         username: usernameResult.username,
         full_name: fullName || usernameResult.username,
-        email: email,
-        phone: phoneFinal,
+        email: identifier,
+        phone,
         role: pageRole,
         community_category: pageRole === 'student' ? 'campus' : pageRole === 'business' ? 'business' : 'community',
         password: password,
-        account_role: 'member',
         bio: '',
         location: '',
       });
 
-      const session = NexovantaDB.Session.set(user);
+      if (result.needsEmailConfirmation) {
+        showAuthMessage('success', 'Account created. Check your email and confirm your address before signing in.');
+        return;
+      }
+      const session = NexovantaDB.Session.set(result.user);
+      if (!session) {
+        showAuthMessage('error', 'Your account was created, but a signed-in session is not available yet. Verify your email, then sign in.');
+        return;
+      }
 
       if (pageRole === 'business') {
         showAuthMessage('success', `🎉 Business account created! Welcome, @${session.username}! Setting up your storefront…`);
@@ -801,19 +862,7 @@
 
     // ─── Demo Logins ──────────────────────────────────────────────────────────────
     function performDemoLogin(type) {
-      const usernames = { student: 'chukastudent24', business: 'ndaganicafe', resident: 'chukaresidents', admin: 'amosletela' };
-      const un = usernames[type] || 'chukastudent24';
-      const user = NexovantaDB.Users.getByUsername(un);
-
-      if (!user) {
-        showAuthMessage('error', 'Demo user not found. Please refresh the page to reset seed data.');
-        return;
-      }
-
-      const session = NexovantaDB.Session.set(user);
-      showAuthMessage('success', `✅ Demo login as @${session.username} — Redirecting…`);
-      const destination = (type === 'business') ? 'storefront.html' : 'feed.html';
-      setTimeout(() => window.location.href = destination, 900);
+      showAuthMessage('error', 'Demo profiles are sample content only and cannot authenticate. Create a Supabase account to sign in.');
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────────

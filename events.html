@@ -10,6 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
   <script src="nexovanta-db.js"></script>
   <script src="auth-guard.js"></script>
 
@@ -1589,7 +1591,8 @@
 
   <!-- Page Logic Script -->
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
+      await NexovantaDB.ready;
       let currentFilter = 'upcoming';
       let searchQuery = '';
       let activeDetailEventId = null;
@@ -1842,8 +1845,8 @@
         }
       });
 
-      document.getElementById('navLogoutBtn')?.addEventListener('click', () => {
-        NexovantaDB.Session.clear();
+      document.getElementById('navLogoutBtn')?.addEventListener('click', async () => {
+        await NexovantaDB.Session.clear();
         showToast('Logged out successfully.');
         setTimeout(() => { window.location.reload(); }, 600);
       });

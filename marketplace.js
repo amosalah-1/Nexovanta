@@ -22,7 +22,8 @@
     activeSellerDashboardShopId: 'shop-2' // Default to Oloika Electronics for instant testing
   };
 
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', async () => {
+    await NexovantaDB.ready;
     initMarketplace();
   });
 
@@ -1163,6 +1164,16 @@
     const modal = document.getElementById('checkoutModalBackdrop');
     if (!modal) return;
 
+    const session = NexovantaDB && NexovantaDB.Session ? NexovantaDB.Session.get() : null;
+    if (!session || !session.loggedIn) {
+      showToast('Please sign in to place an order with Supabase.');
+      setTimeout(() => {
+        const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `login.html?return=${returnUrl}`;
+      }, 500);
+      return;
+    }
+
     const summary = window.MarketplaceStore.getCartSummary();
     if (!summary.items.length) {
       showToast('Your cart is empty.');
@@ -1186,16 +1197,9 @@
     }
 
     // Pre-fill user details if logged in
-    const savedUser = localStorage.getItem('nexovanta_user');
-    if (savedUser) {
-      try {
-        const user = JSON.parse(savedUser);
-        const nameIn = document.getElementById('checkoutCustomerName');
-        if (nameIn && user.name) nameIn.value = user.name;
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    const user = NexovantaDB.Session.get();
+    const nameIn = document.getElementById('checkoutCustomerName');
+    if (nameIn && user && user.full_name) nameIn.value = user.full_name;
 
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
@@ -1212,6 +1216,12 @@
   function handleCheckoutSubmit(e) {
     e.preventDefault();
 
+    const session = NexovantaDB && NexovantaDB.Session ? NexovantaDB.Session.get() : null;
+    if (!session || !session.loggedIn) {
+      showToast('Please sign in to place an order with Supabase.');
+      return;
+    }
+
     const name = document.getElementById('checkoutCustomerName')?.value;
     const phone = document.getElementById('checkoutCustomerPhone')?.value;
     const email = document.getElementById('checkoutCustomerEmail')?.value;
@@ -1221,6 +1231,7 @@
     const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked')?.value || 'mpesa';
 
     const orderResult = window.MarketplaceStore.createOrders({
+      customer_id: session.id,
       customer_name: name,
       customer_phone: phone,
       customer_email: email,
@@ -1690,6 +1701,11 @@
     if (reviewForm) {
       reviewForm.addEventListener('submit', (e) => {
         e.preventDefault();
+        const session = NexovantaDB.Session.get();
+        if (!session) {
+          showToast('Please sign in with your Nexovanta account before posting a review.');
+          return;
+        }
         const modal = document.getElementById('reviewModalBackdrop');
         const shopId = modal?.getAttribute('data-target-shop');
         const name = document.getElementById('revCustomerName')?.value;
@@ -1805,10 +1821,6 @@
       const sess = NexovantaDB.Session.get();
       if (sess && sess.loggedIn) user = sess;
     }
-    if (!user) {
-      try { user = JSON.parse(localStorage.getItem('nexovanta_user') || 'null'); } catch (_) {}
-    }
-
     const navLoginBtn    = document.getElementById('navLoginBtn');
     const navUserBadge   = document.getElementById('navUserBadge');
     const navUserName    = document.getElementById('navUserName');

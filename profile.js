@@ -5,7 +5,8 @@
  * ===================================================================
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await NexovantaDB.ready;
   // 1. Session & Auth Guard
   const session = NexovantaDB.Session.get();
   if (!session || !session.id) {
@@ -1187,9 +1188,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Logout
     const logoutBtn = document.getElementById('menuLogoutBtn');
     if (logoutBtn) {
-      logoutBtn.addEventListener('click', (e) => {
+      logoutBtn.addEventListener('click', async (e) => {
         e.preventDefault();
-        NexovantaDB.Session.clear();
+        await NexovantaDB.Session.clear();
         window.location.href = 'login.html';
       });
     }

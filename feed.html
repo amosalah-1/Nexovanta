@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="feed.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
   <script src="nexovanta-db.js"></script>
   <script src="auth-guard.js"></script>
 </head>
@@ -605,7 +607,8 @@
     let infiniteObserver = null;
 
     // ─── Initialization ────────────────────────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
+      await NexovantaDB.ready;
       // 1. Session & Auth Check (with smooth auto-healing for any valid test session)
       let session = NexovantaDB.Session.get();
       if (session && session.loggedIn && (!session.id || !session.username)) {
@@ -819,10 +822,10 @@
       // Logout handler
       const logoutBtn = document.getElementById('dropdownLogoutBtn');
       if (logoutBtn) {
-        logoutBtn.addEventListener('click', () => {
-          NexovantaDB.Session.clear();
+        logoutBtn.addEventListener('click', async () => {
+          await NexovantaDB.Session.clear();
           showToast('Logged out successfully.');
-          setTimeout(() => { window.location.href = 'login.html'; }, 500);
+          window.location.href = 'login.html';
         });
       }
 

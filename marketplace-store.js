@@ -22,6 +22,14 @@
       this.linkOwnersByNexovantaDB();
     }
 
+    saveCollection(key, records) {
+      if (window.NexovantaDB && typeof window.NexovantaDB.syncCollection === 'function') {
+        window.NexovantaDB.syncCollection(key, records);
+      } else {
+        localStorage.setItem(key, JSON.stringify(records));
+      }
+    }
+
     /**
      * For demo data: try to match seed shop owner_name to a NexovantaDB business user
      * so that owner_id is set on shops even before the storefront.html flow runs.
@@ -60,7 +68,7 @@
       });
 
       if (changed) {
-        localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(shops));
+        this.saveCollection(STORAGE_KEYS.SHOPS, shops);
       }
     }
 
@@ -69,17 +77,17 @@
 
       // Initialize Shops
       if (!localStorage.getItem(STORAGE_KEYS.SHOPS)) {
-        localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(seed.shops || []));
+        this.saveCollection(STORAGE_KEYS.SHOPS, seed.shops || []);
       }
 
       // Initialize Products
       if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) {
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(seed.products || []));
+        this.saveCollection(STORAGE_KEYS.PRODUCTS, seed.products || []);
       }
 
       // Initialize Reviews
       if (!localStorage.getItem(STORAGE_KEYS.REVIEWS)) {
-        localStorage.setItem(STORAGE_KEYS.REVIEWS, JSON.stringify(seed.reviews || []));
+        this.saveCollection(STORAGE_KEYS.REVIEWS, seed.reviews || []);
       }
 
       // Initialize Empty Collections if missing
@@ -146,10 +154,10 @@
             ]
           }
         ];
-        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(sampleOrders));
+        this.saveCollection(STORAGE_KEYS.ORDERS, sampleOrders);
       }
       if (!localStorage.getItem(STORAGE_KEYS.WISHLIST)) {
-        localStorage.setItem(STORAGE_KEYS.WISHLIST, JSON.stringify([]));
+        this.saveCollection(STORAGE_KEYS.WISHLIST, []);
       }
     }
 
@@ -221,6 +229,7 @@
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
 
+      const session = typeof NexovantaDB !== 'undefined' ? NexovantaDB.Session.get() : null;
       const newShop = {
         id: newId,
         slug: slug,
@@ -243,15 +252,18 @@
         storefront_style: 'standard-shop',
         awning_color: shopData.awning_color || '#00d2ff',
         accent_color: shopData.accent_color || '#0284c7',
-        owner_name: shopData.owner_name || 'Verified Merchant',
-        owner_id: shopData.owner_id || null,
+        owner_name: shopData.owner_name || (session && session.full_name) || 'Verified Merchant',
+        owner_id: shopData.owner_id || (session && session.id) || null,
         description: shopData.description || 'Welcome to our digital shopfront on Nexovanta!',
         badges: ['New Merchant', 'Community Verified'],
         created_at: new Date().toISOString()
       };
 
       shops.unshift(newShop);
-      localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(shops));
+      this.saveCollection(STORAGE_KEYS.SHOPS, shops);
+      if (session && typeof NexovantaDB !== 'undefined') {
+        NexovantaDB.Users.update(session.id, { marketplace_shop_id: newId });
+      }
       return newShop;
     }
 
@@ -260,7 +272,7 @@
       const idx = shops.findIndex(s => s.id === shopId);
       if (idx !== -1) {
         shops[idx] = { ...shops[idx], ...updateData, updated_at: new Date().toISOString() };
-        localStorage.setItem(STORAGE_KEYS.SHOPS, JSON.stringify(shops));
+        this.saveCollection(STORAGE_KEYS.SHOPS, shops);
         return shops[idx];
       }
       return null;
@@ -362,7 +374,7 @@
       };
 
       products.unshift(newProduct);
-      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+      this.saveCollection(STORAGE_KEYS.PRODUCTS, products);
 
       // Update shop's product count
       if (shop) {
@@ -377,7 +389,7 @@
       const idx = products.findIndex(p => p.id === productId);
       if (idx !== -1) {
         products[idx] = { ...products[idx], ...updateData, updated_at: new Date().toISOString() };
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+        this.saveCollection(STORAGE_KEYS.PRODUCTS, products);
         return products[idx];
       }
       return null;
@@ -389,7 +401,7 @@
       if (!product) return false;
 
       products = products.filter(p => p.id !== productId);
-      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+      this.saveCollection(STORAGE_KEYS.PRODUCTS, products);
 
       // Decrement shop product count
       const shop = this.getShopById(product.shop_id);
@@ -620,7 +632,7 @@
         existingOrders.unshift(order);
       });
 
-      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(existingOrders));
+      this.saveCollection(STORAGE_KEYS.ORDERS, existingOrders);
 
       // Clear Cart after successful order generation
       this.clearCart();
@@ -654,7 +666,7 @@
       if (idx !== -1) {
         orders[idx].order_status = newStatus;
         orders[idx].updated_at = new Date().toISOString();
-        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+        this.saveCollection(STORAGE_KEYS.ORDERS, orders);
         return orders[idx];
       }
       return null;
@@ -674,6 +686,9 @@
       const reviews = JSON.parse(localStorage.getItem(STORAGE_KEYS.REVIEWS) || '[]');
       const newReview = {
         id: 'rev-' + Date.now(),
+        author_id: typeof NexovantaDB !== 'undefined' && NexovantaDB.Session.get()
+          ? NexovantaDB.Session.get().id
+          : null,
         shop_id: reviewData.shop_id,
         product_id: reviewData.product_id || null,
         customer_name: reviewData.customer_name || 'Verified Buyer',
@@ -684,7 +699,7 @@
       };
 
       reviews.unshift(newReview);
-      localStorage.setItem(STORAGE_KEYS.REVIEWS, JSON.stringify(reviews));
+      this.saveCollection(STORAGE_KEYS.REVIEWS, reviews);
 
       // Update shop rating average
       const shopReviews = reviews.filter(r => r.shop_id === reviewData.shop_id);
@@ -702,7 +717,9 @@
 
     // --- WISHLIST / FAVOURITES ---
     getWishlist() {
-      return JSON.parse(localStorage.getItem(STORAGE_KEYS.WISHLIST) || '[]');
+      const session = typeof NexovantaDB !== 'undefined' ? NexovantaDB.Session.get() : null;
+      const key = session ? `${STORAGE_KEYS.WISHLIST}_${session.id}` : STORAGE_KEYS.WISHLIST;
+      return JSON.parse(localStorage.getItem(key) || '[]');
     }
 
     isWishlisted(productId) {
@@ -720,7 +737,7 @@
         list.push(productId);
         added = true;
       }
-      localStorage.setItem(STORAGE_KEYS.WISHLIST, JSON.stringify(list));
+      this.saveCollection(STORAGE_KEYS.WISHLIST, list);
       return { success: true, added: added, wishlist: list };
     }
 

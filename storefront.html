@@ -19,6 +19,8 @@
   <link rel="stylesheet" href="marketplace.css">
 
   <!-- DB layer must load first -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
   <script src="nexovanta-db.js"></script>
   <script src="auth-guard.js"></script>
 
@@ -815,7 +817,8 @@
     // ──────────────────────────────────────────────────────────────────
     // BOOT
     // ──────────────────────────────────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
+      await NexovantaDB.ready;
       session = NexovantaDB.Session.get();
 
       // Must be logged in
@@ -1297,8 +1300,8 @@
     // ──────────────────────────────────────────────────────────────────
     // LOGOUT
     // ──────────────────────────────────────────────────────────────────
-    window.logoutNexovanta = function () {
-      NexovantaDB.Session.clear();
+    window.logoutNexovanta = async function () {
+      await NexovantaDB.Session.clear();
       window.location.href = 'login.html';
     };
 

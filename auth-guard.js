@@ -10,13 +10,24 @@
  *   <script src="auth-guard.js"></script>
  */
 
-(function () {
+(async function () {
   'use strict';
 
-  // Run synchronously so the redirect happens before the DOM paints
   try {
+    await NexovantaDB.ready;
+    if (!NexovantaDB.supabase) {
+      window.location.replace('login.html');
+      return;
+    }
+    const { data, error } = await NexovantaDB.supabase.auth.getSession();
+    if (error) throw error;
     var session = JSON.parse(localStorage.getItem('nexovanta_user') || 'null');
-    var isLoggedIn = !!(session && session.loggedIn && session.id);
+    var isLoggedIn = !!(
+      data.session &&
+      session &&
+      session.loggedIn &&
+      session.auth_user_id === data.session.user.id
+    );
 
     if (!isLoggedIn) {
       // Preserve the intended destination so login.html can redirect back after auth
@@ -28,7 +39,7 @@
       window.location.replace(loginUrl);
     }
   } catch (e) {
-    // If localStorage is unavailable, redirect to login
+    console.error('Nexovanta authentication check failed:', e);
     window.location.replace('login.html');
   }
 })();
