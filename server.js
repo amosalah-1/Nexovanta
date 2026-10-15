@@ -1,5 +1,7 @@
 'use strict';
 
+require('dotenv').config();
+
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -20,6 +22,44 @@ const mimeTypes = {
   '.webp': 'image/webp',
 };
 
+function getSupabaseConfig() {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co';
+  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'your-anon-public-key';
+  return { url, anonKey };
+}
+
+function renderSupabaseConfigScript() {
+  const { url, anonKey } = getSupabaseConfig();
+  return `window.NEXOVANTA_SUPABASE_CONFIG = {
+  url: ${JSON.stringify(url)},
+  anonKey: ${JSON.stringify(anonKey)}
+};
+
+const SUPABASE_PLACEHOLDER = /^(https:\/\/your-project\.supabase\.co|your-anon-public-key|your-public-anon-key)$/i;
+
+if (
+  window.supabase &&
+  window.NEXOVANTA_SUPABASE_CONFIG.url &&
+  window.NEXOVANTA_SUPABASE_CONFIG.url.startsWith('https://') &&
+  window.NEXOVANTA_SUPABASE_CONFIG.anonKey &&
+  !SUPABASE_PLACEHOLDER.test(window.NEXOVANTA_SUPABASE_CONFIG.url) &&
+  !SUPABASE_PLACEHOLDER.test(window.NEXOVANTA_SUPABASE_CONFIG.anonKey)
+) {
+  window.NexovantaSupabase = window.supabase.createClient(
+    window.NEXOVANTA_SUPABASE_CONFIG.url,
+    window.NEXOVANTA_SUPABASE_CONFIG.anonKey,
+    {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    }
+  );
+}
+`;
+}
+
 const server = http.createServer((request, response) => {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     response.writeHead(405, { Allow: 'GET, HEAD' });
@@ -33,6 +73,21 @@ const server = http.createServer((request, response) => {
   } catch {
     response.writeHead(400);
     response.end('Bad Request');
+    return;
+  }
+
+  if (pathname === '/supabase-config.js') {
+    const script = renderSupabaseConfigScript();
+    response.writeHead(200, {
+      'Content-Type': 'application/javascript; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Content-Length': Buffer.byteLength(script)
+    });
+    if (request.method === 'HEAD') {
+      response.end();
+      return;
+    }
+    response.end(script);
     return;
   }
 
@@ -120,4 +175,5 @@ server.on('error', error => {
 server.listen(port, host, () => {
   console.log(`Nexovanta is available at http://${host}:${port}`);
   console.log('Press Ctrl+C to stop the server.');
+  console.log(`Supabase env values are loaded from .env: ${process.env.SUPABASE_URL ? 'URL present' : 'URL missing'}, ${process.env.SUPABASE_ANON_KEY ? 'anon key present' : 'anon key missing'}`);
 });
