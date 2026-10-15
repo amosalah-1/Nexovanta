@@ -222,7 +222,7 @@ const NexovantaDB = (() => {
   async function initializeCloud() {
     if (!supabase) {
       localStorage.removeItem(KEYS.SESSION);
-      showDatabaseMessage('Supabase is not configured. Nexovanta is using local demo data; remote login and database persistence are unavailable. Add your project URL and anon key to supabase-config.js.');
+      showDatabaseMessage('Supabase is not configured. Nexovanta is using local demo data; remote login and database persistence are unavailable. Set SUPABASE_URL and SUPABASE_ANON_KEY in your local .env file or hosting environment variables.');
       return false;
     }
 

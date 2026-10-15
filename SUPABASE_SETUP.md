@@ -6,7 +6,7 @@ The browser app uses Supabase Auth for sign-in and Supabase Postgres for platfor
 
 1. Create a project at [supabase.com/dashboard](https://supabase.com/dashboard).
 2. In **Project Settings → API**, copy the **Project URL** and **anon/public key**.
-3. Check `supabase-config.js` contains your Project URL as the base URL (for example, `https://your-project.supabase.co`, without `/rest/v1`) and your anon/public key. The anon key is designed for browsers; RLS in the schema protects data. Never use a service-role or secret key in browser code.
+3. For local development, put the Project URL and anon/public key in `.env`. Use the project base URL (for example, `https://your-project.supabase.co`, without `/rest/v1`). The anon key is designed for browsers; RLS in the schema protects data. Never use a service-role or secret key in browser code.
 4. Serve the project from a local web server (not by opening HTML files with `file://`). Configure your local and production origins under **Authentication → URL Configuration**.
 
 ## 2. Create the database schema
@@ -60,9 +60,19 @@ This serves the existing browser app locally; it is not a separate application b
 4. Open the site in another browser/device and confirm public records are shared.
 5. Check browser console and the Nexovanta connection banner for RLS/configuration errors.
 
+## 6. Deploy to Vercel
+
+1. Push the repository to GitHub and import it into Vercel. Leave the framework preset as **Other** and leave the build command and output directory empty; the site files are served from the repository root.
+2. In Vercel, open **Project Settings → Environment Variables** and add `SUPABASE_URL` (the project base URL, without `/rest/v1`) and `SUPABASE_ANON_KEY` (the public anon key). Add them for Production and Preview as needed. Do not add the service-role key.
+3. Deploy or redeploy. Vercel's `/api/supabase-config` function supplies the browser config at `/supabase-config.js`; the rewrite is in `vercel.json`.
+4. In Supabase **Authentication → URL Configuration**, set the deployed site URL and add the Vercel production domain and any Preview domains you will use to the allowed redirect URLs.
+5. Open the deployed site and verify sign-up/login and database reads. If the config endpoint returns an error, check that both Vercel environment variables are set and redeploy after changing them.
+
+The `.env` file is only for local development and is ignored by Git. Hosting platforms do not automatically read it; configure their environment variables in the dashboard.
+
 ## Operational notes
 
-- `supabase-config.js` contains public connection settings only. Keep service-role keys, database passwords, and secrets on a trusted server.
+- The browser config contains only the public Supabase URL and anon key. Keep service-role keys, database passwords, and secrets on a trusted server.
 - Username availability is checked against the locally hydrated profile cache; the database unique constraint remains authoritative.
 - Login now uses email and password through Supabase Auth. Reset passwords through Supabase Auth/email (not the former local-only demo reset).
 - The current application uses browser-side JSON records to match its existing synchronous UI. For high traffic or payments, move order creation, inventory changes, moderation, and privileged operations to validated Postgres RPCs or a trusted server and tighten the relevant RLS policies.
