@@ -30,7 +30,8 @@ function getSupabaseConfig() {
 
 function renderSupabaseConfigScript() {
   const { url, anonKey } = getSupabaseConfig();
-  return `window.NEXOVANTA_SUPABASE_CONFIG = {
+  return `if (typeof window !== 'undefined') {
+window.NEXOVANTA_SUPABASE_CONFIG = {
   url: ${JSON.stringify(url)},
   anonKey: ${JSON.stringify(anonKey)}
 };
@@ -56,6 +57,7 @@ if (
       }
     }
   );
+}
 }
 `;
 }
