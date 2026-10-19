@@ -13,8 +13,9 @@ The browser app uses Supabase Auth for sign-in and Supabase Postgres for platfor
 
 1. Open **SQL Editor** in the Supabase dashboard.
 2. Paste and run all of `supabase-schema.sql`.
-3. In **Authentication → Providers**, keep Email enabled. Set the site URL and allowed redirect URLs for your development and production hosts.
-4. Configure email delivery and confirmation behavior for your deployment. With email confirmation enabled, new users must confirm their email before logging in.
+3. In **Authentication → URL Configuration**, set **Site URL** to your production app URL and add the callback URLs under **Redirect URLs**. Nexovanta sends signup confirmations back to the current host's `/login.html?verified=1`; allow each host/path used for signup, for example `https://nexovanta-seven.vercel.app/login.html`, `http://127.0.0.1:8000/login.html`, and `http://localhost:8000/login.html`. If using another Vercel production or preview domain/local port, add its matching `/login.html` URL as well. The URL must match the browser host where the user registered.
+4. In **Authentication → Providers**, keep Email enabled. Configure email delivery and confirmation behavior for your deployment. With email confirmation enabled, new users must confirm their email before logging in.
+5. If you customized the **Confirm signup** email template, keep its link as `{{ .ConfirmationURL }}` so Supabase can validate the one-time token and apply the requested redirect.
 
 The schema creates profiles, record storage for social/events/news/marketplace and private chat data, row-level security policies, and an Auth trigger that creates each new profile. It also creates the public `profile-media` Storage bucket for profile avatars and cover photos. Authenticated users can upload only into their own profile-ID folder; images are restricted to JPG, PNG, or WebP and 5 MB, while profile images are publicly readable. Chat conversations and messages are readable only by their members. The record policies use security-definer checks for cross-record lookups to avoid recursive RLS evaluation. Existing projects should rerun the full schema after updates so new helper functions, buckets, collections, and access policies are installed. New account privileges are always `member`; assign moderator/admin privileges only through trusted SQL.
 

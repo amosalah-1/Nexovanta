@@ -494,6 +494,7 @@ const NexovantaDB = (() => {
         email,
         password: data.password,
         options: {
+          emailRedirectTo: `${window.location.origin}/login.html?verified=1`,
           data: {
             username: normalizeUsername(data.username),
             full_name: data.full_name || '',

@@ -428,10 +428,25 @@
     // ─── Init ─────────────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', async () => {
       await NexovantaDB.ready;
-      const isPasswordRecovery = new URLSearchParams(window.location.search).get('mode') === 'recovery' ||
-        new URLSearchParams(window.location.hash.slice(1)).get('type') === 'recovery';
+      const callbackParams = new URLSearchParams(window.location.hash.slice(1));
+      const queryParams = new URLSearchParams(window.location.search);
+      const callbackError = callbackParams.get('error_description') ||
+        callbackParams.get('error') ||
+        queryParams.get('error_description') ||
+        queryParams.get('error');
+      if (callbackError) {
+        window.history.replaceState({}, '', `${window.location.pathname}${window.location.search}`);
+      }
+
+      const verifiedEmail = queryParams.get('verified') === '1' ||
+        callbackParams.get('type') === 'signup';
+      const isPasswordRecovery = queryParams.get('mode') === 'recovery' ||
+        callbackParams.get('type') === 'recovery';
       // If already logged in, go to feed (or intended page)
-      if (!isPasswordRecovery && NexovantaDB.Session.isLoggedIn()) {
+      if (!callbackError && !isPasswordRecovery && NexovantaDB.Session.isLoggedIn()) {
+        if (verifiedEmail) {
+          showAuthMessage('success', 'Your email is verified. Welcome to Nexovanta!');
+        }
         window.location.href = getReturnUrl();
         return;
       }
@@ -481,6 +496,14 @@
 
       renderFields();
       if (isPasswordRecovery) setResetMode();
+      if (callbackError) {
+        showAuthMessage('error', callbackError);
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+      else if (verifiedEmail) {
+        showAuthMessage('success', 'Your email is verified. Sign in to continue.');
+        window.history.replaceState({}, '', window.location.pathname);
+      }
     });
 
     // ─── Role Selection ───────────────────────────────────────────────────────────
