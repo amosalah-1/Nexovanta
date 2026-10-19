@@ -10,6 +10,7 @@
 .messages-back-link:hover { color: var(--accent-cyan); }
 .messages-back-link i { margin-right: 7px; }
 .messages-new-group, .messages-primary-button { border: 0; border-radius: 10px; padding: 11px 16px; color: #03111b; background: var(--grad-primary); font: 700 .86rem var(--font-heading); cursor: pointer; transition: var(--transition); }
+.messages-new-group:disabled, .messages-primary-button:disabled, .messages-composer button:disabled { opacity: .6; cursor: wait; transform: none; }
 .messages-new-group:hover, .messages-primary-button:hover { transform: translateY(-1px); box-shadow: var(--shadow-cyan); }
 .messages-new-group i, .messages-primary-button i { margin-right: 7px; }
 .messages-shell { width: min(1320px, calc(100% - 48px)); height: min(790px, calc(100vh - 116px)); min-height: 540px; margin: 20px auto; display: grid; grid-template-columns: 340px minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border-light); border-radius: var(--radius-lg); background: rgba(11, 20, 38, .82); box-shadow: var(--shadow-lg); }

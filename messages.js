@@ -18,8 +18,9 @@
     }
   }
 
-  function saveCollection(key, records) {
-    NexovantaDB.syncCollection(key, records);
+  async function saveCollection(key, records) {
+    const saved = await NexovantaDB.syncCollection(key, records);
+    if (!saved) throw new Error('Your message could not be saved. Check your connection and try again.');
   }
 
   function escapeHtml(value) {
@@ -118,7 +119,12 @@
       <span class="messages-list-copy"><strong>${escapeHtml(displayName(user))}</strong><span>@${escapeHtml(user.username)} · ${escapeHtml(user.role || 'member')}</span></span>
     </button>`).join('');
     container.querySelectorAll('[data-user-id]').forEach(button => {
-      button.addEventListener('click', () => startDirectConversation(button.dataset.userId));
+      button.addEventListener('click', () => {
+        startDirectConversation(button.dataset.userId).catch(error => {
+          console.error('Could not start direct conversation:', error);
+          showFeedback('Could not start this conversation. Please try again.');
+        });
+      });
     });
   }
 
@@ -167,7 +173,7 @@
     document.getElementById('messageInput').focus();
   }
 
-  function startDirectConversation(userId) {
+  async function startDirectConversation(userId) {
     const person = NexovantaDB.Users.getById(userId);
     if (!person || !person.auth_user_id || String(person.id) === String(session.id)) return;
     const members = [String(session.id), String(person.id)].sort();
@@ -189,7 +195,13 @@
       };
       const conversations = readCollection(CONVERSATIONS_KEY);
       conversations.push(conversation);
-      saveCollection(CONVERSATIONS_KEY, conversations);
+      try {
+        await saveCollection(CONVERSATIONS_KEY, conversations);
+      } catch (error) {
+        localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations.filter(item => item.id !== conversation.id)));
+        showFeedback(error.message || 'Could not start this conversation. Please try again.');
+        return;
+      }
     }
     document.getElementById('peopleSearch').value = '';
     renderPeople();
@@ -210,7 +222,7 @@
     document.getElementById('groupName').focus();
   }
 
-  function createGroup(event) {
+  async function createGroup(event) {
     event.preventDefault();
     const name = document.getElementById('groupName').value.trim();
     const topic = document.getElementById('groupTopic').value.trim();
@@ -237,7 +249,18 @@
     };
     const conversations = readCollection(CONVERSATIONS_KEY);
     conversations.push(conversation);
-    saveCollection(CONVERSATIONS_KEY, conversations);
+    const submitButton = event.currentTarget.querySelector('[type="submit"]');
+    submitButton.disabled = true;
+    try {
+      await saveCollection(CONVERSATIONS_KEY, conversations);
+    } catch (saveError) {
+      localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations.filter(item => item.id !== conversation.id)));
+      error.textContent = saveError.message || 'Could not create the group. Please try again.';
+      error.hidden = false;
+      return;
+    } finally {
+      submitButton.disabled = false;
+    }
     document.getElementById('groupModal').hidden = true;
     document.getElementById('peopleSearch').value = '';
     renderPeople();
@@ -245,7 +268,7 @@
     openConversation(conversation.id);
   }
 
-  function sendMessage(event) {
+  async function sendMessage(event) {
     event.preventDefault();
     const input = document.getElementById('messageInput');
     const body = input.value.trim();
@@ -258,14 +281,27 @@
       return;
     }
     const messages = readCollection(MESSAGES_KEY);
-    messages.push({
+    const message = {
       id: NexovantaDB.uuid(),
       conversation_id: conversation.id,
       sender_id: String(session.id),
       body,
       created_at: new Date().toISOString(),
-    });
-    saveCollection(MESSAGES_KEY, messages);
+    };
+    const nextMessages = [...messages, message];
+    const sendButton = document.querySelector('#messageForm button[type="submit"]');
+    sendButton.disabled = true;
+    input.disabled = true;
+    try {
+      await saveCollection(MESSAGES_KEY, nextMessages);
+    } catch (error) {
+      localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
+      showFeedback(error.message || 'Message could not be sent. Please try again.');
+      return;
+    } finally {
+      sendButton.disabled = false;
+      input.disabled = false;
+    }
     input.value = '';
     input.style.height = 'auto';
     renderThread(conversation);
@@ -304,7 +340,12 @@
       renderConversations();
       renderPeople();
     });
-    document.getElementById('messageForm').addEventListener('submit', sendMessage);
+    document.getElementById('messageForm').addEventListener('submit', event => {
+      sendMessage(event).catch(error => {
+        console.error('Could not send message:', error);
+        showFeedback('Could not send your message. Please try again.');
+      });
+    });
     document.getElementById('newGroupButton').addEventListener('click', openGroupModal);
     document.getElementById('emptyGroupButton').addEventListener('click', openGroupModal);
     document.getElementById('closeGroupModal').addEventListener('click', () => {
@@ -313,7 +354,12 @@
     document.getElementById('groupModal').addEventListener('click', event => {
       if (event.target.id === 'groupModal') event.currentTarget.hidden = true;
     });
-    document.getElementById('groupForm').addEventListener('submit', createGroup);
+    document.getElementById('groupForm').addEventListener('submit', event => {
+      createGroup(event).catch(error => {
+        console.error('Could not create group:', error);
+        showFeedback('Could not create the group. Please try again.');
+      });
+    });
     document.getElementById('mobileBackButton').addEventListener('click', () => shell.classList.remove('chat-open'));
     document.getElementById('messageInput').addEventListener('keydown', event => {
       if (event.key === 'Enter' && !event.shiftKey) {

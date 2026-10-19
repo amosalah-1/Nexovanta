@@ -137,13 +137,18 @@ const NexovantaDB = (() => {
   }
 
   function queueCollectionWrite(key, data, previousRecords) {
-    if (!cloudReady || !supabase) return;
+    if (!cloudReady || !supabase) return Promise.resolve(false);
     const previous = pendingWrites.get(key) || Promise.resolve();
     const next = previous
       .catch(() => {})
       .then(() => persistCollection(key, data, previousRecords))
-      .catch(error => showDatabaseMessage(`Could not save ${key} to Supabase: ${error.message || error}`));
+      .then(() => true)
+      .catch(error => {
+        showDatabaseMessage(`Could not save ${key} to Supabase: ${error.message || error}`);
+        return false;
+      });
     pendingWrites.set(key, next);
+    return next;
   }
 
   async function persistCollection(collection, records, previousRecords) {
