@@ -92,6 +92,7 @@ language sql
 stable
 security definer
 set search_path = ''
+set row_security = off
 as $$
   select exists (
     select 1
@@ -104,6 +105,44 @@ $$;
 
 revoke all on function public.nexovanta_is_chat_member(text) from public, anon;
 grant execute on function public.nexovanta_is_chat_member(text) to authenticated;
+
+create or replace function public.nexovanta_current_user_owns_shop(shop_id text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.nexovanta_records r
+    where r.collection = 'nexovanta_shops_db'
+      and r.record_id = shop_id
+      and r.owner_id = public.nexovanta_current_profile_id()
+  )
+$$;
+
+create or replace function public.nexovanta_shop_exists(shop_id text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.nexovanta_records r
+    where r.collection = 'nexovanta_shops_db'
+      and r.record_id = shop_id
+  )
+$$;
+
+revoke all on function public.nexovanta_current_user_owns_shop(text) from public, anon;
+grant execute on function public.nexovanta_current_user_owns_shop(text) to authenticated;
+revoke all on function public.nexovanta_shop_exists(text) from public, anon;
+grant execute on function public.nexovanta_shop_exists(text) to authenticated;
 
 create or replace function public.nexovanta_create_profile()
 returns trigger
@@ -243,12 +282,7 @@ create policy "Owners and moderators read private records"
     )
     or (
       collection = 'nexovanta_orders_db'
-      and exists (
-        select 1 from public.nexovanta_records s
-        where s.collection = 'nexovanta_shops_db'
-          and s.record_id = nexovanta_records.data ->> 'shop_id'
-          and s.owner_id = public.nexovanta_current_profile_id()
-      )
+      and public.nexovanta_current_user_owns_shop(data ->> 'shop_id')
     )
   );
 
@@ -286,21 +320,13 @@ create policy "Authenticated users create owned records"
     )
     or (collection = 'nexovanta_shops_db' and owner_id = public.nexovanta_current_profile_id()
       and data ->> 'owner_id' = public.nexovanta_current_profile_id())
-    or (collection = 'nexovanta_products_db' and exists (
-      select 1 from public.nexovanta_records s
-      where s.collection = 'nexovanta_shops_db'
-        and s.record_id = data ->> 'shop_id'
-        and s.owner_id = public.nexovanta_current_profile_id()
-    ))
+    or (collection = 'nexovanta_products_db'
+      and public.nexovanta_current_user_owns_shop(data ->> 'shop_id'))
     or (collection = 'nexovanta_reviews_db' and data ->> 'author_id' = public.nexovanta_current_profile_id())
     or (collection = 'nexovanta_orders_db'
       and coalesce(data ->> 'customer_name', '') <> ''
       and coalesce(data ->> 'customer_phone', '') <> ''
-      and exists (
-        select 1 from public.nexovanta_records s
-        where s.collection = 'nexovanta_shops_db'
-          and s.record_id = data ->> 'shop_id'
-      ))
+      and public.nexovanta_shop_exists(data ->> 'shop_id'))
   );
 
 drop policy if exists "Owners and moderators update records" on public.nexovanta_records;
@@ -311,12 +337,7 @@ create policy "Owners and moderators update records"
     or public.nexovanta_is_moderator()
     or (
       collection = 'nexovanta_orders_db'
-      and exists (
-        select 1 from public.nexovanta_records s
-        where s.collection = 'nexovanta_shops_db'
-          and s.record_id = nexovanta_records.data ->> 'shop_id'
-          and s.owner_id = public.nexovanta_current_profile_id()
-      )
+      and public.nexovanta_current_user_owns_shop(data ->> 'shop_id')
     )
   )
   with check (
@@ -324,12 +345,7 @@ create policy "Owners and moderators update records"
     or public.nexovanta_is_moderator()
     or (
       collection = 'nexovanta_orders_db'
-      and exists (
-        select 1 from public.nexovanta_records s
-        where s.collection = 'nexovanta_shops_db'
-          and s.record_id = nexovanta_records.data ->> 'shop_id'
-          and s.owner_id = public.nexovanta_current_profile_id()
-      )
+      and public.nexovanta_current_user_owns_shop(data ->> 'shop_id')
     )
   );
 

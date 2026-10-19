@@ -16,7 +16,7 @@ The browser app uses Supabase Auth for sign-in and Supabase Postgres for platfor
 3. In **Authentication → Providers**, keep Email enabled. Set the site URL and allowed redirect URLs for your development and production hosts.
 4. Configure email delivery and confirmation behavior for your deployment. With email confirmation enabled, new users must confirm their email before logging in.
 
-The schema creates profiles, record storage for social/events/news/marketplace and private chat data, row-level security policies, and an Auth trigger that creates each new profile. Chat conversations and messages are readable only by their members. Existing projects should rerun the schema after updates so the new chat collections and access policies are installed. New account privileges are always `member`; assign moderator/admin privileges only through trusted SQL.
+The schema creates profiles, record storage for social/events/news/marketplace and private chat data, row-level security policies, and an Auth trigger that creates each new profile. Chat conversations and messages are readable only by their members. The record policies use security-definer checks for cross-record lookups to avoid recursive RLS evaluation. Existing projects should rerun the full schema after updates so new helper functions, collections, and access policies are installed. New account privileges are always `member`; assign moderator/admin privileges only through trusted SQL.
 
 ## 3. Promote the initial administrator
 
