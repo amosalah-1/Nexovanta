@@ -2444,6 +2444,10 @@ body.feed-body {
 
 /* Mobile (<768px): Hide Both Sidebars, Show Bottom Nav */
 @media (max-width: 768px) {
+  :root {
+    --feed-nav-height: 62px;
+  }
+
   .feed-layout-container {
     grid-template-columns: 1fr;
     padding: 0 12px;
@@ -2465,7 +2469,25 @@ body.feed-body {
 
   /* Compact Navbar on Mobile */
   .feed-nav-inner {
-    padding: 0 14px;
+    padding: 0 10px;
+    gap: 6px;
+  }
+
+  .feed-nav-logo {
+    height: 34px;
+  }
+
+  .feed-nav-brand {
+    gap: 8px;
+  }
+
+  .feed-nav-brand-title {
+    font-size: 1.02rem;
+  }
+
+  .feed-nav-brand-tag {
+    font-size: 0.58rem;
+    letter-spacing: 0.5px;
   }
 
   .feed-nav-search-wrap {
@@ -2484,6 +2506,16 @@ body.feed-body {
 
   .feed-nav-actions .feed-nav-icon-btn.desktop-only {
     display: none;
+  }
+
+  .feed-nav-actions {
+    gap: 5px;
+  }
+
+  .feed-nav-icon-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 0.9rem;
   }
 
   .feed-nav-username-pill {
@@ -2520,6 +2552,14 @@ body.feed-body {
 }
 
 @media (max-width: 480px) {
+  .feed-nav-inner {
+    padding: 0 8px;
+  }
+
+  .feed-nav-brand-tag {
+    display: none;
+  }
+
   .feed-post-actions-bar {
     grid-template-columns: repeat(4, 1fr);
   }

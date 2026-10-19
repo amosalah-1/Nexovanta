@@ -41,10 +41,17 @@ function initVideoControls() {
   video.playsInline = true;
   video.loop = true;
 
-  // Play attempt
-  video.play().catch((err) => {
-    console.log('Video autoplay prevented by browser policies, waiting for interaction:', err);
-  });
+  const shouldDeferVideo = window.matchMedia('(max-width: 768px), (prefers-reduced-motion: reduce)').matches ||
+    (navigator.connection && navigator.connection.saveData);
+  if (!shouldDeferVideo) {
+    const startVideo = () => {
+      video.play().catch((err) => {
+        console.log('Video autoplay prevented by browser policies, waiting for interaction:', err);
+      });
+    };
+    if ('requestIdleCallback' in window) window.requestIdleCallback(startVideo, { timeout: 4000 });
+    else window.setTimeout(startVideo, 2500);
+  }
 
   if (playBtn) {
     playBtn.addEventListener('click', () => {

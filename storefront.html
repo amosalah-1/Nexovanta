@@ -19,10 +19,10 @@
   <link rel="stylesheet" href="marketplace.css">
 
   <!-- DB layer must load first -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-config.js"></script>
-  <script src="nexovanta-db.js"></script>
-  <script src="auth-guard.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="supabase-config.js"></script>
+  <script defer src="nexovanta-db.js"></script>
+  <script defer src="auth-guard.js"></script>
 
   <style>
     /* ── Page Layout ─────────────────────────────────────────────── */
@@ -276,7 +276,7 @@
 
   <!-- Background Video -->
   <div class="video-bg-container">
-    <video id="bgVideo" class="bg-video" autoplay muted loop playsinline poster="Logo.jpg">
+    <video id="bgVideo" class="bg-video" muted loop playsinline preload="none" poster="Logo.jpg">
       <source src="Video Project 4.mp4" type="video/mp4">
     </video>
   </div>

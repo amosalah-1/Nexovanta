@@ -51,15 +51,19 @@ window.NEXOVANTA_SUPABASE_CONFIG = {
   anonKey: ${JSON.stringify(anonKey)}
 };
 
-const SUPABASE_PLACEHOLDER = /^(https:\/\/your-project\.supabase\.co|your-anon-public-key|your-public-anon-key)$/i;
+const SUPABASE_PLACEHOLDERS = [
+  'https://your-project.supabase.co',
+  'your-anon-public-key',
+  'your-public-anon-key'
+];
 
 if (
   window.supabase &&
   window.NEXOVANTA_SUPABASE_CONFIG.url &&
   window.NEXOVANTA_SUPABASE_CONFIG.url.startsWith('https://') &&
   window.NEXOVANTA_SUPABASE_CONFIG.anonKey &&
-  !SUPABASE_PLACEHOLDER.test(window.NEXOVANTA_SUPABASE_CONFIG.url) &&
-  !SUPABASE_PLACEHOLDER.test(window.NEXOVANTA_SUPABASE_CONFIG.anonKey)
+  !SUPABASE_PLACEHOLDERS.includes(window.NEXOVANTA_SUPABASE_CONFIG.url.toLowerCase()) &&
+  !SUPABASE_PLACEHOLDERS.includes(window.NEXOVANTA_SUPABASE_CONFIG.anonKey.toLowerCase())
 ) {
   window.NexovantaSupabase = window.supabase.createClient(
     window.NEXOVANTA_SUPABASE_CONFIG.url,

@@ -53,6 +53,8 @@ const NexovantaDB = (() => {
   const remoteSnapshots = new Map();
   const pendingWrites = new Map();
   const LEGACY_BACKUP_KEY = 'nx_legacy_migration_backup_v1';
+  const CLOUD_CACHE_KEY = 'nx_cloud_cache_v1';
+  const CLOUD_CACHE_TTL = 60 * 1000;
   let activeAuthUserId = null;
   let activeProfileId = null;
   let cloudReady = false;
@@ -235,6 +237,37 @@ const NexovantaDB = (() => {
     if (authError) throw authError;
     activeAuthUserId = authData.session ? authData.session.user.id : null;
     if (!activeAuthUserId) localStorage.removeItem(KEYS.SESSION);
+
+    const cacheUserId = activeAuthUserId || 'anonymous';
+    let cachedCloudState = null;
+    try {
+      cachedCloudState = JSON.parse(localStorage.getItem(CLOUD_CACHE_KEY) || 'null');
+    } catch (error) {
+      console.error('Could not read the cloud cache timestamp:', error);
+    }
+    const cachedProfiles = readAll(KEYS.USERS);
+    const hasCachedProfile = !activeAuthUserId ||
+      cachedProfiles.some(profile => profile.auth_user_id === activeAuthUserId || profile.id === activeAuthUserId);
+    if (hasCachedProfile && cachedCloudState &&
+        cachedCloudState.userId === cacheUserId &&
+        Date.now() - cachedCloudState.timestamp < CLOUD_CACHE_TTL) {
+      const ownProfile = activeAuthUserId
+        ? cachedProfiles.find(profile => profile.auth_user_id === activeAuthUserId || profile.id === activeAuthUserId)
+        : null;
+      activeProfileId = ownProfile ? ownProfile.id : null;
+      if (ownProfile) Session.set(ownProfile);
+      cloudReady = true;
+      supabase.auth.onAuthStateChange((event, session) => {
+        activeAuthUserId = session ? session.user.id : null;
+        if (event === 'SIGNED_OUT') {
+          activeProfileId = null;
+          localStorage.removeItem(KEYS.SESSION);
+          localStorage.removeItem(CLOUD_CACHE_KEY);
+        }
+      });
+      return true;
+    }
+
     backupLegacyCache();
 
     const profiles = await fetchAllRows('nexovanta_profiles_public', '*');
@@ -318,6 +351,10 @@ const NexovantaDB = (() => {
       password: undefined,
     }))));
     cloudReady = true;
+    localStorage.setItem(CLOUD_CACHE_KEY, JSON.stringify({
+      userId: cacheUserId,
+      timestamp: Date.now(),
+    }));
     supabase.auth.onAuthStateChange((event, session) => {
       activeAuthUserId = session ? session.user.id : null;
       if (event === 'SIGNED_OUT') {

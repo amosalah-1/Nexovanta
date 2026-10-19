@@ -8,7 +8,13 @@ window.NEXOVANTA_SUPABASE_CONFIG = {
   anonKey: 'your-anon-public-key'
 };
 
-if (window.supabase && window.NEXOVANTA_SUPABASE_CONFIG.url.startsWith('https://') && window.NEXOVANTA_SUPABASE_CONFIG.anonKey) {
+if (
+  window.supabase &&
+  window.NEXOVANTA_SUPABASE_CONFIG.url.startsWith('https://') &&
+  window.NEXOVANTA_SUPABASE_CONFIG.anonKey &&
+  window.NEXOVANTA_SUPABASE_CONFIG.url !== 'https://your-project.supabase.co' &&
+  window.NEXOVANTA_SUPABASE_CONFIG.anonKey !== 'your-anon-public-key'
+) {
   window.NexovantaSupabase = window.supabase.createClient(
     window.NEXOVANTA_SUPABASE_CONFIG.url,
     window.NEXOVANTA_SUPABASE_CONFIG.anonKey,
