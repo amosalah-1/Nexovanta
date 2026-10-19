@@ -22,14 +22,29 @@ const mimeTypes = {
   '.webp': 'image/webp',
 };
 
+function getProjectUrl() {
+  const configuredUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  if (!configuredUrl) return '';
+  try {
+    const url = new URL(configuredUrl);
+    if (url.protocol !== 'https:') return '';
+    url.pathname = url.pathname.replace(/\/rest\/v1\/?$/i, '').replace(/\/+$/, '');
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
+
 function getSupabaseConfig() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co';
-  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'your-anon-public-key';
+  const url = getProjectUrl();
+  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !anonKey || /^(your-anon-public-key|your-public-anon-key)$/i.test(anonKey)) return null;
   return { url, anonKey };
 }
 
-function renderSupabaseConfigScript() {
-  const { url, anonKey } = getSupabaseConfig();
+function renderSupabaseConfigScript({ url, anonKey }) {
   return `if (typeof window !== 'undefined') {
 window.NEXOVANTA_SUPABASE_CONFIG = {
   url: ${JSON.stringify(url)},
@@ -79,7 +94,22 @@ const server = http.createServer((request, response) => {
   }
 
   if (pathname === '/supabase-config.js') {
-    const script = renderSupabaseConfigScript();
+    const config = getSupabaseConfig();
+    if (!config) {
+      const message = 'Supabase configuration is missing or invalid. Set SUPABASE_URL to the project base URL and SUPABASE_ANON_KEY to the public anon key.';
+      response.writeHead(500, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Content-Length': Buffer.byteLength(message)
+      });
+      if (request.method === 'HEAD') {
+        response.end();
+        return;
+      }
+      response.end(message);
+      return;
+    }
+    const script = renderSupabaseConfigScript(config);
     response.writeHead(200, {
       'Content-Type': 'application/javascript; charset=utf-8',
       'Cache-Control': 'no-store',
