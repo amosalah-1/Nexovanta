@@ -1,10 +1,25 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "rewrites": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/supabase-config.js",
-      "destination": "/api/supabase-config"
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    },
+    {
+      "src": "api/supabase-config.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/supabase-config.js",
+      "dest": "/api/supabase-config.js"
+    },
+    {
+      "handle": "filesystem"
     }
   ]
 }
