@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Messages &amp; Groups | Nexovanta</title>
+  <meta name="description" content="Chat privately with Chuka community members or create a group to share updates and ideas.">
+  <link rel="icon" type="image/jpeg" href="Logo.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="messages.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="nexovanta-db.js"></script>
+  <script src="auth-guard.js"></script>
+  <script src="messages.js" defer></script>
+</head>
+<body class="messages-page">
+  <header class="messages-topbar">
+    <a class="messages-brand" href="feed.html">
+      <img src="Logo.jpg" alt="" class="messages-logo">
+      <span><strong>NEXOVANTA</strong><small>Community messages</small></span>
+    </a>
+    <div class="messages-top-actions">
+      <a href="feed.html" class="messages-back-link"><i class="fa-solid fa-arrow-left"></i> Back to feed</a>
+      <button type="button" class="messages-new-group" id="newGroupButton">
+        <i class="fa-solid fa-user-group"></i><span>New group</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="messages-shell">
+    <aside class="messages-sidebar" aria-label="Conversations and people">
+      <div class="messages-sidebar-heading">
+        <div>
+          <p class="messages-eyebrow">YOUR COMMUNITY</p>
+          <h1>Messages</h1>
+        </div>
+        <i class="fa-regular fa-paper-plane"></i>
+      </div>
+      <label class="messages-search">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <input id="peopleSearch" type="search" placeholder="Find a chat or person" autocomplete="off" aria-label="Find a conversation or person">
+      </label>
+      <p class="messages-list-label" id="conversationListLabel">YOUR CHATS</p>
+      <div class="messages-conversation-list" id="conversationList" aria-live="polite"></div>
+      <p class="messages-list-label messages-people-label" id="peopleListLabel" hidden>PEOPLE</p>
+      <div class="messages-people-list" id="peopleList"></div>
+      <div class="messages-sidebar-note"><i class="fa-solid fa-lock"></i> Conversations are visible to their members.</div>
+    </aside>
+
+    <section class="messages-chat" aria-label="Chat">
+      <div class="messages-feedback" id="messagesFeedback" role="status" aria-live="polite" hidden></div>
+      <div class="messages-empty" id="emptyChat">
+        <div class="messages-empty-icon"><i class="fa-solid fa-comments"></i></div>
+        <h2>Good conversations start here</h2>
+        <p>Choose someone to message, or bring your community together in a group.</p>
+        <button type="button" id="emptyGroupButton" class="messages-primary-button"><i class="fa-solid fa-user-group"></i> Create a group</button>
+      </div>
+      <div class="messages-active-chat" id="activeChat" hidden>
+        <header class="messages-chat-header">
+          <button type="button" class="messages-mobile-back" id="mobileBackButton" aria-label="Back to conversations"><i class="fa-solid fa-arrow-left"></i></button>
+          <div class="messages-avatar messages-chat-avatar" id="chatAvatar"></div>
+          <div class="messages-chat-heading">
+            <h2 id="chatTitle"></h2>
+            <p id="chatSubtitle"></p>
+          </div>
+        </header>
+        <div class="messages-thread" id="messageThread" aria-live="polite"></div>
+        <form class="messages-composer" id="messageForm">
+          <label class="visually-hidden" for="messageInput">Write a message</label>
+          <textarea id="messageInput" rows="1" maxlength="2000" placeholder="Write a message..." required></textarea>
+          <button type="submit" aria-label="Send message"><i class="fa-solid fa-paper-plane"></i></button>
+        </form>
+        <p class="messages-composer-hint">Press Enter to send · Shift + Enter for a new line</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="messages-modal-backdrop" id="groupModal" hidden>
+    <section class="messages-modal" role="dialog" aria-modal="true" aria-labelledby="groupModalTitle">
+      <button type="button" class="messages-modal-close" id="closeGroupModal" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+      <p class="messages-eyebrow">BRING PEOPLE TOGETHER</p>
+      <h2 id="groupModalTitle">Create a group</h2>
+      <p class="messages-modal-copy">Give your group a name and choose the people who should be part of the conversation.</p>
+      <form id="groupForm">
+        <label class="messages-field-label" for="groupName">Group name</label>
+        <input class="messages-text-field" id="groupName" name="groupName" type="text" maxlength="60" placeholder="e.g. Chuka Campus Creatives" required>
+        <label class="messages-field-label" for="groupTopic">What's this group about? <span>(optional)</span></label>
+        <input class="messages-text-field" id="groupTopic" name="groupTopic" type="text" maxlength="100" placeholder="Study sessions, local events, business ideas...">
+        <p class="messages-field-label">Add members <span>(select at least one person)</span></p>
+        <div class="messages-member-picker" id="groupMembers"></div>
+        <p class="messages-modal-error" id="groupError" role="alert" hidden></p>
+        <button class="messages-primary-button messages-create-group-button" type="submit"><i class="fa-solid fa-plus"></i> Create group</button>
+      </form>
+    </section>
+  </div>
+</body>
+</html>

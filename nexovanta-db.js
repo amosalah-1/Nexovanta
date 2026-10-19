@@ -20,6 +20,8 @@ const NexovantaDB = (() => {
     NOTIFICATIONS: 'nx_notifications',
     REPORTS:       'nx_reports',
     NEWS:          'nx_news',
+    CHAT_CONVERSATIONS: 'nx_chat_conversations',
+    CHAT_MESSAGES: 'nx_chat_messages',
     SESSION:       'nexovanta_user',
     SEEDED:        'nx_seeded_v5',
   };
@@ -27,6 +29,7 @@ const NexovantaDB = (() => {
   const RECORD_KEYS = [
     KEYS.POSTS, KEYS.COMMENTS, KEYS.REACTIONS, KEYS.EVENTS, KEYS.EVENT_RSVPS,
     KEYS.SAVED_POSTS, KEYS.NOTIFICATIONS, KEYS.REPORTS, KEYS.NEWS,
+    KEYS.CHAT_CONVERSATIONS, KEYS.CHAT_MESSAGES,
     'nexovanta_shops_db', 'nexovanta_products_db', 'nexovanta_orders_db',
     'nexovanta_reviews_db', 'nexovanta_wishlist_db',
   ];
@@ -40,6 +43,8 @@ const NexovantaDB = (() => {
     [KEYS.NOTIFICATIONS]: 'recipient_id',
     [KEYS.REPORTS]: 'reporter_id',
     [KEYS.NEWS]: 'author_id',
+    [KEYS.CHAT_CONVERSATIONS]: 'created_by',
+    [KEYS.CHAT_MESSAGES]: 'sender_id',
     nexovanta_shops_db: 'owner_id',
     nexovanta_reviews_db: 'author_id',
     nexovanta_wishlist_db: 'user_id',

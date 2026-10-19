@@ -22,9 +22,10 @@ create table if not exists public.nexovanta_profiles (
 );
 
 create table if not exists public.nexovanta_records (
-  collection text not null check (collection in (
+  collection text not null constraint nexovanta_records_collection_check check (collection in (
     'nx_posts', 'nx_comments', 'nx_reactions', 'nx_events', 'nx_event_rsvps',
     'nx_saved_posts', 'nx_notifications', 'nx_reports', 'nx_news',
+    'nx_chat_conversations', 'nx_chat_messages',
     'nexovanta_shops_db', 'nexovanta_products_db', 'nexovanta_orders_db',
     'nexovanta_reviews_db', 'nexovanta_wishlist_db'
   )),
@@ -34,6 +35,17 @@ create table if not exists public.nexovanta_records (
   updated_at timestamptz not null default now(),
   primary key (collection, record_id)
 );
+
+alter table public.nexovanta_records
+  drop constraint if exists nexovanta_records_collection_check;
+alter table public.nexovanta_records
+  add constraint nexovanta_records_collection_check check (collection in (
+    'nx_posts', 'nx_comments', 'nx_reactions', 'nx_events', 'nx_event_rsvps',
+    'nx_saved_posts', 'nx_notifications', 'nx_reports', 'nx_news',
+    'nx_chat_conversations', 'nx_chat_messages',
+    'nexovanta_shops_db', 'nexovanta_products_db', 'nexovanta_orders_db',
+    'nexovanta_reviews_db', 'nexovanta_wishlist_db'
+  ));
 
 create index if not exists nexovanta_records_collection_owner_idx
   on public.nexovanta_records (collection, owner_id);
@@ -73,6 +85,25 @@ as $$
       and p.account_role in ('admin', 'moderator')
   )
 $$;
+
+create or replace function public.nexovanta_is_chat_member(conversation_id text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.nexovanta_records r
+    where r.collection = 'nx_chat_conversations'
+      and r.record_id = conversation_id
+      and r.data -> 'member_ids' ? public.nexovanta_current_profile_id()
+  )
+$$;
+
+revoke all on function public.nexovanta_is_chat_member(text) from public, anon;
+grant execute on function public.nexovanta_is_chat_member(text) to authenticated;
 
 create or replace function public.nexovanta_create_profile()
 returns trigger
@@ -199,6 +230,14 @@ create policy "Owners and moderators read private records"
     owner_id = public.nexovanta_current_profile_id()
     or public.nexovanta_is_moderator()
     or (
+      collection = 'nx_chat_conversations'
+      and data -> 'member_ids' ? public.nexovanta_current_profile_id()
+    )
+    or (
+      collection = 'nx_chat_messages'
+      and public.nexovanta_is_chat_member(data ->> 'conversation_id')
+    )
+    or (
       collection = 'nexovanta_orders_db'
       and data ->> 'customer_id' = public.nexovanta_current_profile_id()
     )
@@ -233,6 +272,18 @@ create policy "Authenticated users create owned records"
       ))
     or (collection = 'nx_reports' and data ->> 'reporter_id' = public.nexovanta_current_profile_id())
     or (collection = 'nx_news' and data ->> 'author_id' = public.nexovanta_current_profile_id())
+    or (
+      collection = 'nx_chat_conversations'
+      and owner_id = public.nexovanta_current_profile_id()
+      and data ->> 'created_by' = public.nexovanta_current_profile_id()
+      and data -> 'member_ids' ? public.nexovanta_current_profile_id()
+    )
+    or (
+      collection = 'nx_chat_messages'
+      and owner_id = public.nexovanta_current_profile_id()
+      and data ->> 'sender_id' = public.nexovanta_current_profile_id()
+      and public.nexovanta_is_chat_member(data ->> 'conversation_id')
+    )
     or (collection = 'nexovanta_shops_db' and owner_id = public.nexovanta_current_profile_id()
       and data ->> 'owner_id' = public.nexovanta_current_profile_id())
     or (collection = 'nexovanta_products_db' and exists (

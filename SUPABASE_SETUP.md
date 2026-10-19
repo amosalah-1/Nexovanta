@@ -6,7 +6,7 @@ The browser app uses Supabase Auth for sign-in and Supabase Postgres for platfor
 
 1. Create a project at [supabase.com/dashboard](https://supabase.com/dashboard).
 2. In **Project Settings → API**, copy the **Project URL** and **anon/public key**.
-3. For local development, put the Project URL and anon/public key in `.env`. Use the project base URL (for example, `https://your-project.supabase.co`, without `/rest/v1`). The anon key is designed for browsers; RLS in the schema protects data. Never use a service-role or secret key in browser code.
+3. For local development, copy `.env.example` to `.env` and replace both placeholders with the Project URL and anon/public key. Use the project base URL (for example, `https://your-project.supabase.co`, without `/rest/v1`). The anon key is designed for browsers; RLS in the schema protects data. Never use a service-role or secret key in browser code.
 4. Serve the project from a local web server (not by opening HTML files with `file://`). Configure your local and production origins under **Authentication → URL Configuration**.
 
 ## 2. Create the database schema
@@ -16,7 +16,7 @@ The browser app uses Supabase Auth for sign-in and Supabase Postgres for platfor
 3. In **Authentication → Providers**, keep Email enabled. Set the site URL and allowed redirect URLs for your development and production hosts.
 4. Configure email delivery and confirmation behavior for your deployment. With email confirmation enabled, new users must confirm their email before logging in.
 
-The schema creates profiles, record storage for the existing social/events/news/marketplace data, row-level security policies, and an Auth trigger that creates each new profile. New account privileges are always `member`; assign moderator/admin privileges only through trusted SQL.
+The schema creates profiles, record storage for social/events/news/marketplace and private chat data, row-level security policies, and an Auth trigger that creates each new profile. Chat conversations and messages are readable only by their members. Existing projects should rerun the schema after updates so the new chat collections and access policies are installed. New account privileges are always `member`; assign moderator/admin privileges only through trusted SQL.
 
 ## 3. Promote the initial administrator
 
@@ -54,11 +54,20 @@ Then open `http://127.0.0.1:8000`. Start the server from the repository root (th
 
 This serves the existing browser app locally; it is not a separate application backend. Supabase Auth and Postgres requests go directly from the browser to your Supabase project using the public anon key and database RLS.
 
+To verify the local configuration without printing the anon key, request the config endpoint:
+
+```powershell
+(Invoke-WebRequest http://127.0.0.1:8000/supabase-config.js).StatusCode
+```
+
+It should return `200`. If it returns `500`, check that `.env` has both values, that the URL is the project base URL, and that the key is the anon/public key; restart `npm start` after changing `.env`. Do not paste the response body into public logs because it contains the browser anon key.
+
 1. Register a new account using a real email address and sign in.
 2. Create a post, event, marketplace shop/product, and a test order.
-3. Confirm records appear in `nexovanta_profiles` and `nexovanta_records`.
-4. Open the site in another browser/device and confirm public records are shared.
-5. Check browser console and the Nexovanta connection banner for RLS/configuration errors.
+3. Start a direct message and create a group with another test account.
+4. Confirm chat records appear in `nexovanta_records` and are visible only to their members.
+5. Open the site in another browser/device and confirm public records are shared.
+6. Check browser console and the Nexovanta connection banner for RLS/configuration errors.
 
 ## 6. Deploy to Vercel
 
@@ -66,9 +75,9 @@ This serves the existing browser app locally; it is not a separate application b
 2. In Vercel, open **Project Settings → Environment Variables** and add `SUPABASE_URL` (the project base URL, without `/rest/v1`) and `SUPABASE_ANON_KEY` (the public anon key). Add them for Production and Preview as needed. Do not add the service-role key.
 3. Deploy or redeploy. The build copies only browser assets into `dist/`, so browser scripts such as `app.js` are served as static files instead of being run by Node. Vercel's `/api/supabase-config` function supplies the browser config at `/supabase-config.js`; the rewrite is in `vercel.json`.
 4. In Supabase **Authentication → URL Configuration**, set the deployed site URL and add the Vercel production domain and any Preview domains you will use to the allowed redirect URLs.
-5. Open the deployed site and verify sign-up/login and database reads. If the config endpoint returns an error, check that both Vercel environment variables are set and redeploy after changing them.
+5. Open `https://<your-deployment>/supabase-config.js` and confirm it returns JavaScript with HTTP `200`; do not share or publish the response body because it includes the anon key. If it returns an error, check both Vercel environment variables, ensure the URL does not include `/rest/v1`, then redeploy after changing them. Finally, open the deployed site and verify sign-up/login and database reads.
 
-The `.env` file is only for local development and is ignored by Git. Hosting platforms do not automatically read it; configure their environment variables in the dashboard.
+The `.env` file is only for local development and is ignored by Git. `.env.example` contains placeholders only. Hosting platforms do not automatically read `.env`; configure their environment variables in the dashboard.
 
 ## Operational notes
 
