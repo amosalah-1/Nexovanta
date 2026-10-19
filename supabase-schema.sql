@@ -36,6 +36,19 @@ create table if not exists public.nexovanta_records (
   primary key (collection, record_id)
 );
 
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'profile-media',
+  'profile-media',
+  true,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/webp']
+)
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
 alter table public.nexovanta_records
   drop constraint if exists nexovanta_records_collection_check;
 alter table public.nexovanta_records
@@ -71,6 +84,27 @@ as $$
   where p.auth_user_id = (select auth.uid())
   limit 1
 $$;
+
+drop policy if exists "Public can read profile media" on storage.objects;
+create policy "Public can read profile media"
+  on storage.objects for select
+  using (bucket_id = 'profile-media');
+
+drop policy if exists "Users upload their own profile media" on storage.objects;
+create policy "Users upload their own profile media"
+  on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'profile-media'
+    and (storage.foldername(name))[1] = public.nexovanta_current_profile_id()
+  );
+
+drop policy if exists "Users delete their own profile media" on storage.objects;
+create policy "Users delete their own profile media"
+  on storage.objects for delete to authenticated
+  using (
+    bucket_id = 'profile-media'
+    and (storage.foldername(name))[1] = public.nexovanta_current_profile_id()
+  );
 
 create or replace function public.nexovanta_is_moderator()
 returns boolean

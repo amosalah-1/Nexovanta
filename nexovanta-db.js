@@ -59,6 +59,7 @@ const NexovantaDB = (() => {
   let activeProfileId = null;
   let cloudReady = false;
   let bannerShown = false;
+  let profileWritePromise = Promise.resolve(true);
 
   function showDatabaseMessage(message) {
     console.error('Nexovanta database:', message);
@@ -193,9 +194,15 @@ const NexovantaDB = (() => {
   }
 
   function writeProfiles(profiles) {
-    if (!cloudReady || !activeProfileId || !supabase) return;
+    if (!cloudReady || !activeProfileId || !supabase) {
+      profileWritePromise = Promise.resolve(false);
+      return profileWritePromise;
+    }
     const profile = profiles.find(item => item.id === activeProfileId);
-    if (!profile) return;
+    if (!profile) {
+      profileWritePromise = Promise.resolve(false);
+      return profileWritePromise;
+    }
     const updates = {
       username: normalizeUsername(profile.username),
       full_name: profile.full_name || '',
@@ -210,12 +217,21 @@ const NexovantaDB = (() => {
       marketplace_shop_id: profile.marketplace_shop_id || null,
       updated_at: now(),
     };
-    supabase.from('nexovanta_profiles')
+    profileWritePromise = supabase.from('nexovanta_profiles')
       .update(updates)
       .eq('id', activeProfileId)
       .then(({ error }) => {
-        if (error) showDatabaseMessage(`Could not save your profile to Supabase: ${error.message}`);
+        if (error) {
+          showDatabaseMessage(`Could not save your profile to Supabase: ${error.message}`);
+          return false;
+        }
+        return true;
+      })
+      .catch(error => {
+        showDatabaseMessage(`Could not save your profile to Supabase: ${error.message || error}`);
+        return false;
       });
+    return profileWritePromise;
   }
 
   async function fetchAllRows(table, columns) {
@@ -416,8 +432,8 @@ const NexovantaDB = (() => {
   function writeAll(key, data) {
     const previous = readAll(key);
     localStorage.setItem(key, JSON.stringify(data));
-    if (key === KEYS.USERS) writeProfiles(data);
-    else queueCollectionWrite(key, data, previous);
+    if (key === KEYS.USERS) return writeProfiles(data);
+    return queueCollectionWrite(key, data, previous);
   }
 
   function readObj(key) {
@@ -533,6 +549,66 @@ const NexovantaDB = (() => {
       users[idx] = { ...users[idx], ...safeChanges, updated_at: now() };
       writeAll(KEYS.USERS, users);
       return users[idx];
+    },
+
+    async updateAndSave(id, changes) {
+      const users = readAll(KEYS.USERS);
+      const idx = users.findIndex(user => user.id === id);
+      if (idx === -1) throw new Error('The profile could not be found.');
+      const previous = users[idx];
+      const safeChanges = { ...changes };
+      delete safeChanges.password;
+      delete safeChanges.password_hash;
+      delete safeChanges.account_role;
+      delete safeChanges.auth_user_id;
+      delete safeChanges.id;
+      users[idx] = { ...previous, ...safeChanges, updated_at: now() };
+      localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+      if (!cloudReady) return users[idx];
+      const saved = await writeProfiles(users);
+      if (!saved) {
+        users[idx] = previous;
+        localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+        throw new Error('Supabase did not save the profile changes. Please try again.');
+      }
+      return users[idx];
+    },
+
+    async uploadProfileImage(profileId, imageType, file) {
+      if (!cloudReady || !supabase) {
+        throw new Error('Supabase is not configured. Profile image uploads are unavailable.');
+      }
+      if (!activeProfileId || String(profileId) !== String(activeProfileId)) {
+        throw new Error('You can only upload images to your own profile.');
+      }
+      if (!['avatar', 'cover'].includes(imageType)) {
+        throw new Error('Choose a valid profile image type.');
+      }
+      const allowedTypes = {
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'image/webp': 'webp',
+      };
+      if (!file || !allowedTypes[file.type]) {
+        throw new Error('Choose a JPG, PNG, or WebP image.');
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('Images must be 5 MB or smaller.');
+      }
+      const filePath = `${profileId}/${imageType}-${uuid()}.${allowedTypes[file.type]}`;
+      const { error } = await supabase.storage
+        .from('profile-media')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          contentType: file.type,
+          upsert: false,
+        });
+      if (error) throw new Error(`Image upload failed: ${error.message}`);
+      const { data } = supabase.storage.from('profile-media').getPublicUrl(filePath);
+      if (!data || !data.publicUrl) {
+        throw new Error('The image uploaded, but Supabase did not return its public URL.');
+      }
+      return data.publicUrl;
     },
 
     async authenticate(identifier, password) {

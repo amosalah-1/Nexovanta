@@ -16,7 +16,7 @@ The browser app uses Supabase Auth for sign-in and Supabase Postgres for platfor
 3. In **Authentication → Providers**, keep Email enabled. Set the site URL and allowed redirect URLs for your development and production hosts.
 4. Configure email delivery and confirmation behavior for your deployment. With email confirmation enabled, new users must confirm their email before logging in.
 
-The schema creates profiles, record storage for social/events/news/marketplace and private chat data, row-level security policies, and an Auth trigger that creates each new profile. Chat conversations and messages are readable only by their members. The record policies use security-definer checks for cross-record lookups to avoid recursive RLS evaluation. Existing projects should rerun the full schema after updates so new helper functions, collections, and access policies are installed. New account privileges are always `member`; assign moderator/admin privileges only through trusted SQL.
+The schema creates profiles, record storage for social/events/news/marketplace and private chat data, row-level security policies, and an Auth trigger that creates each new profile. It also creates the public `profile-media` Storage bucket for profile avatars and cover photos. Authenticated users can upload only into their own profile-ID folder; images are restricted to JPG, PNG, or WebP and 5 MB, while profile images are publicly readable. Chat conversations and messages are readable only by their members. The record policies use security-definer checks for cross-record lookups to avoid recursive RLS evaluation. Existing projects should rerun the full schema after updates so new helper functions, buckets, collections, and access policies are installed. New account privileges are always `member`; assign moderator/admin privileges only through trusted SQL.
 
 ## 3. Promote the initial administrator
 
@@ -64,10 +64,11 @@ It should return `200`. If it returns `500`, check that `.env` has both values, 
 
 1. Register a new account using a real email address and sign in.
 2. Create a post, event, marketplace shop/product, and a test order.
-3. Start a direct message and create a group with another test account.
-4. Confirm chat records appear in `nexovanta_records` and are visible only to their members.
-5. Open the site in another browser/device and confirm public records are shared.
-6. Check browser console and the Nexovanta connection banner for RLS/configuration errors.
+3. Change the test account's avatar and cover photo; confirm objects appear in the `profile-media` bucket and their URLs are saved in `nexovanta_profiles`.
+4. Start a direct message and create a group with another test account.
+5. Confirm chat records appear in `nexovanta_records` and are visible only to their members.
+6. Open the site in another browser/device and confirm public records are shared.
+7. Check browser console and the Nexovanta connection banner for RLS/configuration errors.
 
 ## 6. Deploy to Vercel
 

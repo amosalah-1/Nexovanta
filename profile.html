@@ -1372,7 +1372,7 @@
         <label for="coverFileInput" class="btn-change-cover">
           <i class="fa-solid fa-camera"></i> Change Cover
         </label>
-        <input type="file" id="coverFileInput" accept="image/*" style="display: none;">
+        <input type="file" id="coverFileInput" accept="image/jpeg,image/png,image/webp" style="display: none;">
       </div>
     </section>
 
@@ -1388,7 +1388,7 @@
               <i class="fa-solid fa-camera"></i>
               <span>Change</span>
             </label>
-            <input type="file" id="avatarFileInput" accept="image/*" style="display: none;">
+            <input type="file" id="avatarFileInput" accept="image/jpeg,image/png,image/webp" style="display: none;">
           </div>
 
           <!-- 2. Profile Info Details -->
@@ -1710,13 +1710,15 @@
           <!-- Avatar Image Upload -->
           <div class="auth-form-group">
             <label class="auth-label">Change Avatar Image</label>
-            <input type="file" id="modalAvatarFile" accept="image/*" class="auth-input" style="padding-top: 8px;">
+            <input type="file" id="modalAvatarFile" accept="image/jpeg,image/png,image/webp" class="auth-input" style="padding-top: 8px;">
+            <small>JPG, PNG, or WebP; maximum 5 MB.</small>
           </div>
 
           <!-- Cover Photo Image Upload -->
           <div class="auth-form-group">
             <label class="auth-label">Change Cover Photo</label>
-            <input type="file" id="modalCoverFile" accept="image/*" class="auth-input" style="padding-top: 8px;">
+            <input type="file" id="modalCoverFile" accept="image/jpeg,image/png,image/webp" class="auth-input" style="padding-top: 8px;">
+            <small>JPG, PNG, or WebP; maximum 5 MB.</small>
           </div>
 
           <!-- Privacy Settings -->

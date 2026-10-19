@@ -227,6 +227,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   function setupOwnerControls() {
     if (!isOwner) return;
 
+    const saveProfileImage = async (file, imageType, input) => {
+      if (!file) return;
+      if (input) input.disabled = true;
+      try {
+        const imageUrl = await NexovantaDB.Users.uploadProfileImage(profileUser.id, imageType, file);
+        const field = imageType === 'avatar' ? 'avatar_url' : 'cover_photo_url';
+        profileUser = await NexovantaDB.Users.updateAndSave(profileUser.id, { [field]: imageUrl });
+        if (session.id === profileUser.id) NexovantaDB.Session.set(profileUser);
+        renderProfileHeader();
+        if (imageType === 'avatar') setupTopNavigation(profileUser);
+        if (typeof showToast === 'function') {
+          showToast(imageType === 'avatar' ? 'Profile avatar updated successfully!' : 'Cover photo updated successfully!');
+        }
+      } catch (error) {
+        console.error(`Could not update profile ${imageType}:`, error);
+        if (typeof showToast === 'function') showToast(error.message || 'The image could not be saved. Please try again.');
+      } finally {
+        if (input) {
+          input.disabled = false;
+          input.value = '';
+        }
+      }
+    };
+
     // View as Public toggle
     const toggleBtn = document.getElementById('btnTogglePublicView');
     if (toggleBtn) {
@@ -244,41 +268,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Direct Cover Upload
     const coverInput = document.getElementById('coverFileInput');
     if (coverInput) {
-      coverInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (uploadEvent) => {
-          const dataUrl = uploadEvent.target.result;
-          profileUser = NexovantaDB.Users.update(profileUser.id, { cover_photo_url: dataUrl });
-          if (session.id === profileUser.id) {
-            NexovantaDB.Session.set(profileUser);
-          }
-          renderProfileHeader();
-          if (typeof showToast === 'function') showToast('Cover photo updated successfully!');
-        };
-        reader.readAsDataURL(file);
+      coverInput.addEventListener('change', event => {
+        saveProfileImage(event.target.files[0], 'cover', coverInput);
       });
     }
 
     // Direct Avatar Upload
     const avatarInput = document.getElementById('avatarFileInput');
     if (avatarInput) {
-      avatarInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (uploadEvent) => {
-          const dataUrl = uploadEvent.target.result;
-          profileUser = NexovantaDB.Users.update(profileUser.id, { avatar_url: dataUrl });
-          if (session.id === profileUser.id) {
-            NexovantaDB.Session.set(profileUser);
-          }
-          renderProfileHeader();
-          setupTopNavigation(profileUser);
-          if (typeof showToast === 'function') showToast('Profile avatar updated successfully!');
-        };
-        reader.readAsDataURL(file);
+      avatarInput.addEventListener('change', event => {
+        saveProfileImage(event.target.files[0], 'avatar', avatarInput);
       });
     }
 
@@ -1016,7 +1015,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Save Changes
-    saveBtn.addEventListener('click', () => {
+    saveBtn.addEventListener('click', async () => {
       const newUsername = uInput.value.trim().toLowerCase();
       const valRes = NexovantaDB.validateUsername(newUsername);
 
@@ -1045,56 +1044,35 @@ document.addEventListener('DOMContentLoaded', async () => {
       const avatarFile = document.getElementById('modalAvatarFile').files[0];
       const coverFile = document.getElementById('modalCoverFile').files[0];
 
-      const commitSave = () => {
-        profileUser = NexovantaDB.Users.update(profileUser.id, changes);
-
-        // Update session
-        if (session.id === profileUser.id) {
-          NexovantaDB.Session.set(profileUser);
-        }
-
+      const oldUsername = profileUser.username;
+      const previousButtonText = saveBtn.textContent;
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+      try {
+        const [avatarUrl, coverUrl] = await Promise.all([
+          avatarFile ? NexovantaDB.Users.uploadProfileImage(profileUser.id, 'avatar', avatarFile) : null,
+          coverFile ? NexovantaDB.Users.uploadProfileImage(profileUser.id, 'cover', coverFile) : null,
+        ]);
+        if (avatarUrl) changes.avatar_url = avatarUrl;
+        if (coverUrl) changes.cover_photo_url = coverUrl;
+        profileUser = await NexovantaDB.Users.updateAndSave(profileUser.id, changes);
+        if (session.id === profileUser.id) NexovantaDB.Session.set(profileUser);
         closeModal();
         if (typeof showToast === 'function') showToast('Profile changes saved successfully!');
 
-        // If username changed, redirect to new URL
-        if (newUsername !== profileUser.username) {
+        if (newUsername !== oldUsername) {
           window.location.href = `profile.html?user=${encodeURIComponent(newUsername)}`;
         } else {
           renderProfileHeader();
           renderTabContent();
           setupTopNavigation(profileUser);
         }
-      };
-
-      // Read files if any
-      if (avatarFile && coverFile) {
-        const r1 = new FileReader();
-        r1.onload = (e1) => {
-          changes.avatar_url = e1.target.result;
-          const r2 = new FileReader();
-          r2.onload = (e2) => {
-            changes.cover_photo_url = e2.target.result;
-            commitSave();
-          };
-          r2.readAsDataURL(coverFile);
-        };
-        r1.readAsDataURL(avatarFile);
-      } else if (avatarFile) {
-        const r = new FileReader();
-        r.onload = (e) => {
-          changes.avatar_url = e.target.result;
-          commitSave();
-        };
-        r.readAsDataURL(avatarFile);
-      } else if (coverFile) {
-        const r = new FileReader();
-        r.onload = (e) => {
-          changes.cover_photo_url = e.target.result;
-          commitSave();
-        };
-        r.readAsDataURL(coverFile);
-      } else {
-        commitSave();
+      } catch (error) {
+        console.error('Could not save profile changes:', error);
+        if (typeof showToast === 'function') showToast(error.message || 'Profile changes could not be saved. Please try again.');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = previousButtonText;
       }
     });
   }
