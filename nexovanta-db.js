@@ -59,7 +59,22 @@ const NexovantaDB = (() => {
   let activeProfileId = null;
   let cloudReady = false;
   let bannerShown = false;
+  let sessionStorageFallbackShown = false;
   let profileWritePromise = Promise.resolve(true);
+
+  function isStorageQuotaError(error) {
+    return error && (
+      error.name === 'QuotaExceededError' ||
+      error.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      error.code === 22 ||
+      error.code === 1014
+    );
+  }
+
+  function clearStoredSession() {
+    localStorage.removeItem(KEYS.SESSION);
+    sessionStorage.removeItem(KEYS.SESSION);
+  }
 
   function showDatabaseMessage(message) {
     console.error('Nexovanta database:', message);
@@ -249,7 +264,7 @@ const NexovantaDB = (() => {
 
   async function initializeCloud() {
     if (!supabase) {
-      localStorage.removeItem(KEYS.SESSION);
+      clearStoredSession();
       showDatabaseMessage('Supabase is not configured. Nexovanta is using local demo data; remote login and database persistence are unavailable. Set SUPABASE_URL and SUPABASE_ANON_KEY in your local .env file or hosting environment variables.');
       return false;
     }
@@ -257,7 +272,7 @@ const NexovantaDB = (() => {
     const { data: authData, error: authError } = await supabase.auth.getSession();
     if (authError) throw authError;
     activeAuthUserId = authData.session ? authData.session.user.id : null;
-    if (!activeAuthUserId) localStorage.removeItem(KEYS.SESSION);
+    if (!activeAuthUserId) clearStoredSession();
 
     const cacheUserId = activeAuthUserId || 'anonymous';
     let cachedCloudState = null;
@@ -282,7 +297,7 @@ const NexovantaDB = (() => {
         activeAuthUserId = session ? session.user.id : null;
         if (event === 'SIGNED_OUT') {
           activeProfileId = null;
-          localStorage.removeItem(KEYS.SESSION);
+          clearStoredSession();
           localStorage.removeItem(CLOUD_CACHE_KEY);
         }
       });
@@ -380,7 +395,7 @@ const NexovantaDB = (() => {
       activeAuthUserId = session ? session.user.id : null;
       if (event === 'SIGNED_OUT') {
         activeProfileId = null;
-        localStorage.removeItem(KEYS.SESSION);
+        clearStoredSession();
       }
     });
     return true;
@@ -662,7 +677,15 @@ const NexovantaDB = (() => {
   // ─── Session ──────────────────────────────────────────────────────────────────
   const Session = {
     get() {
-      try { return JSON.parse(localStorage.getItem(KEYS.SESSION) || 'null'); } catch { return null; }
+      for (const storage of [localStorage, sessionStorage]) {
+        try {
+          const value = storage.getItem(KEYS.SESSION);
+          if (value) return JSON.parse(value);
+        } catch (error) {
+          console.error('Could not read the saved Nexovanta session:', error);
+        }
+      }
+      return null;
     },
     set(user) {
       if (!user || !activeAuthUserId || String(user.id) !== String(activeProfileId)) {
@@ -675,7 +698,11 @@ const NexovantaDB = (() => {
         username: user.username,
         full_name: user.full_name,
         email: user.email,
-        avatar_url: user.avatar_url,
+        avatar_url: typeof user.avatar_url === 'string' &&
+          user.avatar_url.length <= 2048 &&
+          !/^data:/i.test(user.avatar_url)
+          ? user.avatar_url
+          : null,
         role: user.role,
         account_role: user.account_role || 'member',
         roleTitle: user.role === 'student' ? 'Chuka Student 🎓'
@@ -684,11 +711,28 @@ const NexovantaDB = (() => {
         marketplace_shop_id: user.marketplace_shop_id || null,
         loggedIn: true,
       };
-      localStorage.setItem(KEYS.SESSION, JSON.stringify(session));
+      const serializedSession = JSON.stringify(session);
+      try {
+        localStorage.setItem(KEYS.SESSION, serializedSession);
+      } catch (error) {
+        if (!isStorageQuotaError(error)) throw error;
+
+        localStorage.removeItem(KEYS.SESSION);
+        try {
+          sessionStorage.setItem(KEYS.SESSION, serializedSession);
+        } catch (fallbackError) {
+          throw new Error(`Browser storage is full, so the signed-in session could not be saved. Free space for this site and sign in again. ${fallbackError.message || fallbackError}`);
+        }
+        if (!sessionStorageFallbackShown) {
+          sessionStorageFallbackShown = true;
+          console.warn('Browser storage is full. The Supabase session is active for this tab only; clear site storage to keep it available after closing the browser.');
+          showDatabaseMessage('Browser storage is full. You are signed in for this tab only; clear site storage to keep your session after closing the browser.');
+        }
+      }
       return session;
     },
     clear() {
-      localStorage.removeItem(KEYS.SESSION);
+      clearStoredSession();
       activeAuthUserId = null;
       activeProfileId = null;
       return supabase ? supabase.auth.signOut().then(({ error }) => {

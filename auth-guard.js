@@ -21,7 +21,10 @@
     }
     const { data, error } = await NexovantaDB.supabase.auth.getSession();
     if (error) throw error;
-    var session = JSON.parse(localStorage.getItem('nexovanta_user') || 'null');
+    var sessionValue = localStorage.getItem('nexovanta_user') ||
+      sessionStorage.getItem('nexovanta_user') ||
+      'null';
+    var session = JSON.parse(sessionValue);
     var isLoggedIn = !!(
       data.session &&
       session &&
