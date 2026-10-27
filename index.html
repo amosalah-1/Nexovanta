@@ -757,14 +757,24 @@
 
       <!-- Auth Form -->
       <div class="auth-modal-body">
-        <form id="authForm">
+        <form id="authForm" novalidate>
           <!-- Primary Identifier -->
           <div class="auth-form-group">
-            <label class="auth-label" id="primaryIdentifierLabel">Student Reg No or Student Email</label>
+            <label class="auth-label" id="primaryIdentifierLabel">Email Address</label>
             <div class="auth-input-wrap">
               <i class="fa-solid fa-user-circle auth-input-icon"></i>
-              <input type="text" id="primaryIdentifierInput" class="auth-input" placeholder="e.g. EB3/12345/23 or student@chuka.ac.ke" required>
+              <input type="email" id="primaryIdentifierInput" class="auth-input" placeholder="Enter your email address" autocomplete="email" required>
             </div>
+          </div>
+
+          <div class="auth-form-group" id="authSignupUsernameGroup" style="display:none;">
+            <label class="auth-label" for="authSignupUsername">Username</label>
+            <div class="auth-input-wrap">
+              <i class="fa-solid fa-at auth-input-icon"></i>
+              <input type="text" id="authSignupUsername" class="auth-input" placeholder="e.g. amosletela"
+                     autocomplete="username" maxlength="30" pattern="[a-zA-Z0-9_]{3,30}" disabled>
+            </div>
+            <small class="auth-label">3–30 characters; letters, numbers, and underscores only.</small>
           </div>
 
           <!-- Dynamic Role-Specific Registration Fields -->
@@ -790,7 +800,7 @@
           <!-- Terms Checkbox (Register Mode) -->
           <div class="auth-options-row" id="termsRow" style="display: none;">
             <label class="auth-checkbox-label">
-              <input type="checkbox" required> I agree to Nexovanta Community Terms & Safety Guidelines
+              <input type="checkbox" id="authTermsCheck" disabled> I agree to Nexovanta Community Terms & Safety Guidelines
             </label>
           </div>
 

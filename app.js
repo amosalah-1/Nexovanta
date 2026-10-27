@@ -343,15 +343,36 @@ function setAuthMode(mode) {
   const submitBtn = document.getElementById('authSubmitBtn');
   const termsRow = document.getElementById('termsRow');
   const rememberRow = document.getElementById('rememberRow');
+  const usernameGroup = document.getElementById('authSignupUsernameGroup');
+  const usernameInput = document.getElementById('authSignupUsername');
+  const termsInput = document.getElementById('authTermsCheck');
 
   if (mode === 'login') {
     if (submitBtn) submitBtn.textContent = 'Log In to Nexovanta';
     if (termsRow) termsRow.style.display = 'none';
     if (rememberRow) rememberRow.style.display = 'flex';
+    if (usernameGroup) usernameGroup.style.display = 'none';
+    if (usernameInput) {
+      usernameInput.required = false;
+      usernameInput.disabled = true;
+    }
+    if (termsInput) {
+      termsInput.required = false;
+      termsInput.disabled = true;
+    }
   } else {
     if (submitBtn) submitBtn.textContent = 'Create My Nexovanta Account';
     if (termsRow) termsRow.style.display = 'flex';
     if (rememberRow) rememberRow.style.display = 'none';
+    if (usernameGroup) usernameGroup.style.display = 'block';
+    if (usernameInput) {
+      usernameInput.required = true;
+      usernameInput.disabled = false;
+    }
+    if (termsInput) {
+      termsInput.required = true;
+      termsInput.disabled = false;
+    }
   }
 
   renderRoleSpecificInputs();
@@ -365,12 +386,15 @@ function renderRoleSpecificInputs() {
   const primaryIdInput = document.getElementById('primaryIdentifierInput');
 
   if (!dynamicContainer) return;
+  if (primaryIdLabel) primaryIdLabel.textContent = 'Email Address';
+  if (primaryIdInput) {
+    primaryIdInput.type = 'email';
+    primaryIdInput.placeholder = 'Enter your email address';
+  }
 
   if (currentAuthRole === 'student') {
     if (roleTitleSpan) roleTitleSpan.textContent = '🎓 Chuka University Student Portal';
     if (roleHelpText) roleHelpText.textContent = 'Connect with classmates, find hostels, trade revision books, and get campus updates.';
-    if (primaryIdLabel) primaryIdLabel.textContent = 'Student Reg No or Student Email';
-    if (primaryIdInput) primaryIdInput.placeholder = 'e.g. EB3/12345/23 or student@chuka.ac.ke';
 
     if (currentAuthMode === 'register') {
       dynamicContainer.innerHTML = `
@@ -411,8 +435,6 @@ function renderRoleSpecificInputs() {
   } else if (currentAuthRole === 'business') {
     if (roleTitleSpan) roleTitleSpan.textContent = '💼 Chuka Business & Merchant Hub';
     if (roleHelpText) roleHelpText.textContent = 'List products, manage your digital shop, reach 15,000+ students & Chuka residents.';
-    if (primaryIdLabel) primaryIdLabel.textContent = 'Business Email or Phone Number';
-    if (primaryIdInput) primaryIdInput.placeholder = 'e.g. contact@chukabakes.co.ke or 0712 345 678';
 
     if (currentAuthMode === 'register') {
       dynamicContainer.innerHTML = `
@@ -454,8 +476,6 @@ function renderRoleSpecificInputs() {
   } else if (currentAuthRole === 'resident') {
     if (roleTitleSpan) roleTitleSpan.textContent = '🏘️ Chuka Resident & Community Portal';
     if (roleHelpText) roleHelpText.textContent = 'Stay informed on local town news, list rental properties, and connect with trusted local services.';
-    if (primaryIdLabel) primaryIdLabel.textContent = 'Phone Number or Email';
-    if (primaryIdInput) primaryIdInput.placeholder = 'e.g. 0722 000 111 or resident@gmail.com';
 
     if (currentAuthMode === 'register') {
       dynamicContainer.innerHTML = `
@@ -500,9 +520,27 @@ function renderRoleSpecificInputs() {
 }
 
 function handleAuthSubmit() {
-  // Redirect to login page for full auth handling
+  if (currentAuthMode === 'register') {
+    const usernameInput = document.getElementById('authSignupUsername');
+    const username = NexovantaDB.validateUsername(usernameInput.value);
+    if (!username.valid) {
+      showToast(username.error);
+      usernameInput.focus();
+      return;
+    }
+    try {
+      sessionStorage.setItem('nexovanta_pending_signup_username', username.username);
+    } catch (error) {
+      console.error('Could not preserve the signup username for the full registration form:', error);
+    }
+  }
+
   closeModal();
-  window.location.href = 'login.html';
+  const params = new URLSearchParams({
+    role: currentAuthRole,
+    mode: currentAuthMode,
+  });
+  window.location.href = `login.html?${params}`;
 }
 
 function performDemoLogin(role) {

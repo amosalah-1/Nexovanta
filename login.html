@@ -28,6 +28,7 @@
   <style>
     .auth-page-wrapper {
       min-height: 100vh;
+      min-height: 100svh;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -215,9 +216,21 @@
     .form-divider span { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; }
 
     @media (max-width: 600px) {
-      .auth-card-container { border-radius: var(--radius-lg); }
-      .role-grid-3 { grid-template-columns: 1fr; }
+      .auth-page-wrapper { justify-content: flex-start; padding: 16px 12px; }
+      .auth-card-container { border-radius: var(--radius-lg); margin: 0; }
       .auth-card-header, .role-select-box, .auth-card-body { padding-left: 20px; padding-right: 20px; }
+      .auth-card-header { padding-top: 24px; }
+      .role-select-box { padding-top: 16px; padding-bottom: 16px; }
+      .role-grid-3 { gap: 8px; }
+      .role-card-btn { padding: 10px 6px; gap: 5px; }
+      .role-card-btn i { font-size: 1.2rem; }
+      .role-card-btn span.role-title { font-size: 0.72rem; }
+      .role-card-btn span.role-sub { font-size: 0.6rem; }
+      .role-info-banner { align-items: flex-start; }
+      .auth-card-body { padding-top: 22px; padding-bottom: 22px; }
+      .auth-options-row { align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+      .demo-login-box { padding: 12px; }
+      .demo-pill { padding: 7px 10px; }
     }
   </style>
 </head>
@@ -314,7 +327,7 @@
           </div>
 
           <!-- ======== LOGIN / BOTH ======== -->
-          <!-- Primary Identifier: Username or Email (Login) | Email / Reg No (Register) -->
+          <!-- Email is required for Supabase sign-in and account creation. -->
           <div class="auth-form-group">
             <label class="auth-label" id="primaryIdLabel">Email Address</label>
             <div class="auth-input-wrap">
@@ -457,6 +470,20 @@
       const modeParam = params.get('mode');
       if (roleParam && ['student','business','resident'].includes(roleParam)) selectRole(roleParam);
       if (modeParam === 'register') setMode('register');
+      if (modeParam === 'register') {
+        let pendingUsername = '';
+        try {
+          pendingUsername = sessionStorage.getItem('nexovanta_pending_signup_username') || '';
+          sessionStorage.removeItem('nexovanta_pending_signup_username');
+        } catch (error) {
+          console.error('Could not restore the signup username on the registration form:', error);
+        }
+        if (pendingUsername) {
+          const usernameInput = document.getElementById('inputUsername');
+          usernameInput.value = pendingUsername;
+          usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
 
       // Role buttons
       document.querySelectorAll('.role-card-btn').forEach(btn => {
