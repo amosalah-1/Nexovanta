@@ -67,17 +67,22 @@ create index if not exists nexovanta_records_data_gin_idx
 
 do $$
 begin
-  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
-     and not exists (
-       select 1 from pg_publication_tables
-       where pubname = 'supabase_realtime'
-         and schemaname = 'public'
-         and tablename = 'nexovanta_records'
-     ) then
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'nexovanta_records'
+  ) then
     alter publication supabase_realtime add table public.nexovanta_records;
   end if;
 end;
 $$;
+
+alter table public.nexovanta_records replica identity full;
 
 create or replace view public.nexovanta_profiles_public
 with (security_invoker = true) as
@@ -289,6 +294,7 @@ grant update (username, full_name, phone, avatar_url, cover_photo_url, bio, loca
   community_category, role, privacy_settings, marketplace_shop_id, updated_at)
   on public.nexovanta_profiles to authenticated;
 grant select, insert, update, delete on public.nexovanta_records to anon, authenticated;
+grant usage on schema public to anon, authenticated;
 grant select on public.nexovanta_profiles_public to anon, authenticated;
 
 drop policy if exists "Public profiles are readable" on public.nexovanta_profiles;
@@ -309,6 +315,11 @@ create policy "Public marketplace and community records are readable"
     'nx_posts', 'nx_comments', 'nx_reactions', 'nx_events', 'nx_event_rsvps', 'nx_news',
     'nexovanta_shops_db', 'nexovanta_products_db', 'nexovanta_reviews_db'
   ));
+
+drop policy if exists "Public posts are readable through Realtime" on public.nexovanta_records;
+create policy "Public posts are readable through Realtime"
+  on public.nexovanta_records for select to anon, authenticated
+  using (collection = 'nx_posts');
 
 drop policy if exists "Owners and moderators read private records" on public.nexovanta_records;
 create policy "Owners and moderators read private records"

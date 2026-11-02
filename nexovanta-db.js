@@ -1424,9 +1424,11 @@ const NexovantaDB = (() => {
         window.dispatchEvent(new CustomEvent('nexovanta:collection-change', { detail: change }));
         if (typeof onChange === 'function') onChange(change);
       })
-      .subscribe(status => {
+      .subscribe((status, error) => {
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          showDatabaseMessage(`Supabase realtime is unavailable for ${collection} (${status}). Re-run supabase-schema.sql and confirm the table is in the supabase_realtime publication.`);
+          const reason = error && error.message ? `: ${error.message}` : '';
+          showDatabaseMessage(`Supabase realtime is unavailable for ${collection} (${status})${reason}. Confirm nexovanta_records is in the supabase_realtime publication and has SELECT access.`);
+          console.error(`Supabase realtime subscription failed for ${collection}:`, status, error || 'No server error details were provided.');
         }
       });
     return () => { supabase.removeChannel(channel); };
