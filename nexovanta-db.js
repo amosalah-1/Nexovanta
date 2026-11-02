@@ -262,9 +262,30 @@ const NexovantaDB = (() => {
     }
   }
 
+  async function fetchSupabasePosts() {
+    const rows = [];
+    const pageSize = 1000;
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await supabase.from('nexovanta_records')
+        .select('record_id,owner_id,data')
+        .eq('collection', KEYS.POSTS)
+        .range(offset, offset + pageSize - 1);
+      if (error) throw error;
+      rows.push(...(data || []));
+      if (!data || data.length < pageSize) break;
+    }
+    remoteSnapshots.set(KEYS.POSTS, new Map(rows.map(row => [String(row.record_id), {
+      data: row.data,
+      owner_id: row.owner_id,
+    }])));
+    localStorage.setItem(KEYS.POSTS, JSON.stringify(rows.map(row => row.data)));
+  }
+
   async function initializeCloud() {
     if (!supabase) {
+      backupLegacyCache();
       clearStoredSession();
+      localStorage.setItem(KEYS.POSTS, JSON.stringify([]));
       showDatabaseMessage('Supabase is not configured. Nexovanta is using local demo data; remote login and database persistence are unavailable. Set SUPABASE_URL and SUPABASE_ANON_KEY in your local .env file or hosting environment variables.');
       return false;
     }
@@ -292,6 +313,7 @@ const NexovantaDB = (() => {
         : null;
       activeProfileId = ownProfile ? ownProfile.id : null;
       if (ownProfile) Session.set(ownProfile);
+      await fetchSupabasePosts();
       cloudReady = true;
       supabase.auth.onAuthStateChange((event, session) => {
         activeAuthUserId = session ? session.user.id : null;
@@ -365,9 +387,13 @@ const NexovantaDB = (() => {
         if (activeProfileId) localStorage.removeItem(collection);
         return;
       }
-      const merged = new Map(local.filter(item => item && item.id).map(item => [String(item.id), item]));
-      rows.forEach(row => merged.set(String(row.record_id), row.data));
-      localStorage.setItem(collection, JSON.stringify(Array.from(merged.values())));
+      if (collection === KEYS.POSTS) {
+        localStorage.setItem(collection, JSON.stringify(rows.map(row => row.data)));
+      } else {
+        const merged = new Map(local.filter(item => item && item.id).map(item => [String(item.id), item]));
+        rows.forEach(row => merged.set(String(row.record_id), row.data));
+        localStorage.setItem(collection, JSON.stringify(Array.from(merged.values())));
+      }
     });
 
     const authEmail = authData.session ? authData.session.user.email || '' : '';
@@ -410,6 +436,11 @@ const NexovantaDB = (() => {
           resolve(false);
         });
     }, { once: true });
+  });
+  ready.then(available => {
+    if (available) startPlatformRealtime();
+  }).catch(error => {
+    showDatabaseMessage(`Could not start Supabase realtime notifications: ${error.message || error}`);
   });
 
   // ─── Utility Helpers ─────────────────────────────────────────────────────────
@@ -499,6 +530,25 @@ const NexovantaDB = (() => {
     getByEmail(email) {
       const norm = (email || '').trim().toLowerCase();
       return readAll(KEYS.USERS).find(u => (u.email || '').toLowerCase() === norm) || null;
+    },
+
+    async searchByUsername(query, limit = 12) {
+      const usernameQuery = normalizeUsername(String(query || '').replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, ''));
+      if (!supabase || usernameQuery.length < 2) return [];
+      const { data, error } = await supabase.from('nexovanta_profiles_public')
+        .select('id,auth_user_id,username,full_name,avatar_url,role')
+        .not('auth_user_id', 'is', null)
+        .ilike('username', `%${usernameQuery}%`)
+        .limit(Math.min(Math.max(Number(limit) || 12, 1), 25));
+      if (error) throw error;
+      const users = readAll(KEYS.USERS);
+      const byId = new Map(users.map(user => [String(user.id), user]));
+      (data || []).forEach(profile => byId.set(String(profile.id), {
+        ...(byId.get(String(profile.id)) || {}),
+        ...profile,
+      }));
+      localStorage.setItem(KEYS.USERS, JSON.stringify(Array.from(byId.values())));
+      return (data || []).filter(profile => String(profile.id) !== String(activeProfileId));
     },
 
     async create(data) {
@@ -635,11 +685,19 @@ const NexovantaDB = (() => {
       if (error) return { success: false, error: 'Invalid email or password.' };
       activeAuthUserId = data.user.id;
 
-      const { data: profile, error: profileError } = await supabase
+      let { data: profile, error: profileError } = await supabase
         .from('nexovanta_profiles_public')
         .select('*')
         .eq('auth_user_id', data.user.id)
         .maybeSingle();
+      if (!profile && !profileError) {
+        const fallback = await supabase.from('nexovanta_profiles_public')
+          .select('*')
+          .eq('id', data.user.id)
+          .maybeSingle();
+        profile = fallback.data;
+        profileError = fallback.error;
+      }
       if (profileError || !profile) {
         await supabase.auth.signOut();
         activeAuthUserId = null;
@@ -1335,6 +1393,80 @@ const NexovantaDB = (() => {
     console.log('NexovantaDB: Seed data loaded successfully.');
   }
 
+  function subscribeToCollection(collection, onChange) {
+    if (!supabase) throw new Error('Supabase is not configured; realtime updates are unavailable.');
+    const channel = supabase.channel(`nexovanta-${collection}-${uuid()}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'nexovanta_records',
+        filter: `collection=eq.${collection}`,
+      }, payload => {
+        const row = payload.new && payload.new.record_id ? payload.new : null;
+        const records = readAll(collection);
+        const recordId = row ? String(row.record_id) : payload.old && payload.old.record_id
+          ? String(payload.old.record_id)
+          : null;
+        if (payload.eventType === 'DELETE' && recordId) {
+          localStorage.setItem(collection, JSON.stringify(records.filter(record => String(record.id) !== recordId)));
+          const snapshot = remoteSnapshots.get(collection);
+          if (snapshot) snapshot.delete(recordId);
+        } else if (row && row.data) {
+          const index = records.findIndex(record => String(record.id) === String(row.record_id));
+          if (index === -1) records.push(row.data);
+          else records[index] = row.data;
+          localStorage.setItem(collection, JSON.stringify(records));
+          const snapshot = remoteSnapshots.get(collection) || new Map();
+          snapshot.set(String(row.record_id), { data: row.data, owner_id: row.owner_id });
+          remoteSnapshots.set(collection, snapshot);
+        }
+        const change = { collection, eventType: payload.eventType, record: row && row.data };
+        window.dispatchEvent(new CustomEvent('nexovanta:collection-change', { detail: change }));
+        if (typeof onChange === 'function') onChange(change);
+      })
+      .subscribe(status => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          showDatabaseMessage(`Supabase realtime is unavailable for ${collection} (${status}). Re-run supabase-schema.sql and confirm the table is in the supabase_realtime publication.`);
+        }
+      });
+    return () => { supabase.removeChannel(channel); };
+  }
+
+  function showPlatformNotification(title, body, tag) {
+    if (!window.Notification || window.Notification.permission !== 'granted') return;
+    const notification = new window.Notification(title, { body, tag });
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+  }
+
+  function startPlatformRealtime() {
+    const currentSession = Session.get();
+    if (!currentSession || !currentSession.loggedIn) return;
+    subscribeToCollection(KEYS.POSTS, change => {
+      const post = change.record;
+      if (change.eventType !== 'INSERT' || !post ||
+          String(post.author_id) === String(currentSession.id)) return;
+      showPlatformNotification(
+        `New post from @${post.author_username || 'community member'}`,
+        String(post.content || '').slice(0, 140),
+        `post-${post.id}`
+      );
+    });
+    subscribeToCollection(KEYS.CHAT_MESSAGES, change => {
+      const message = change.record;
+      if (change.eventType !== 'INSERT' || !message ||
+          String(message.sender_id) === String(currentSession.id)) return;
+      const sender = Users.getById(message.sender_id);
+      showPlatformNotification(
+        `Message from ${sender ? `@${sender.username}` : 'a community member'}`,
+        message.body,
+        `message-${message.id}`
+      );
+    });
+  }
+
   async function migrateLocalData() {
     await ready;
     if (!supabase || !activeProfileId) throw new Error('Sign in to Supabase before migrating local data.');
@@ -1419,6 +1551,7 @@ const NexovantaDB = (() => {
     ready,
     migrateLocalData,
     syncCollection,
+    subscribeToCollection,
     supabase,
   };
 })();

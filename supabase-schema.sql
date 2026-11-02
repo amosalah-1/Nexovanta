@@ -65,6 +65,20 @@ create index if not exists nexovanta_records_collection_owner_idx
 create index if not exists nexovanta_records_data_gin_idx
   on public.nexovanta_records using gin (data);
 
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1 from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public'
+         and tablename = 'nexovanta_records'
+     ) then
+    alter publication supabase_realtime add table public.nexovanta_records;
+  end if;
+end;
+$$;
+
 create or replace view public.nexovanta_profiles_public
 with (security_invoker = true) as
 select id, username, full_name, phone, avatar_url, cover_photo_url, bio, location,

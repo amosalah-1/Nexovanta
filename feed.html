@@ -80,7 +80,10 @@
         <div id="notifDropdown" class="feed-notif-dropdown">
           <div class="feed-notif-header">
             <span class="feed-notif-title"><i class="fa-solid fa-bell"></i> Notifications</span>
-            <button id="markAllReadBtn" class="feed-notif-mark-read">Mark all as read</button>
+            <div class="feed-notif-actions">
+              <button id="enableDesktopNotifications" class="feed-notif-mark-read">Enable alerts</button>
+              <button id="markAllReadBtn" class="feed-notif-mark-read">Mark all as read</button>
+            </div>
           </div>
           <div id="notifList" class="feed-notif-list">
             <!-- Dynamic Notifications Rendered Here -->
@@ -655,6 +658,7 @@
 
       // 8. Render Feed
       renderFeed(true);
+      setupRealtimeNotifications();
 
       // 9. Setup Infinite Scroll Observer
       initInfiniteScroll();
@@ -992,14 +996,63 @@
       if (!currentUser) return;
       const unreadCount = NexovantaDB.Notifications.getUnreadCount(currentUser.id);
       const badge = document.getElementById('notifBadge');
-      if (badge) {
-        if (unreadCount > 0) {
-          badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
-          badge.style.display = 'inline-flex';
-        } else {
-          badge.style.display = 'none';
-        }
+      if (!badge) return;
+      if (unreadCount > 0) {
+        badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+        badge.style.display = 'inline-flex';
+      } else {
+        badge.style.display = 'none';
       }
+    }
+
+    function updateDesktopNotificationButton() {
+      const button = document.getElementById('enableDesktopNotifications');
+      if (!button) return;
+      if (!('Notification' in window) || Notification.permission === 'denied') {
+        button.hidden = true;
+        return;
+      }
+      button.textContent = Notification.permission === 'granted' ? 'Alerts enabled' : 'Enable alerts';
+      button.disabled = Notification.permission === 'granted';
+    }
+
+    function setupRealtimeNotifications() {
+      const permissionButton = document.getElementById('enableDesktopNotifications');
+      permissionButton?.addEventListener('click', async () => {
+        if (!('Notification' in window)) {
+          showToast('This browser does not support desktop notifications.');
+          return;
+        }
+        const permission = await Notification.requestPermission();
+        updateDesktopNotificationButton();
+        if (permission !== 'granted') showToast('Notifications were not enabled. Change this in your browser settings.');
+      });
+      updateDesktopNotificationButton();
+
+      window.addEventListener('nexovanta:collection-change', event => {
+        const change = event.detail;
+        if (change.collection !== 'nx_posts') return;
+        const post = change.record;
+        if (change.eventType === 'INSERT') currentPage = 1;
+        renderFeed(true);
+        updateLeftSidebarStats();
+        if (change.eventType !== 'INSERT' || !post) return;
+        if (String(post.author_id) !== String(currentUser.id)) {
+          const title = `New post from @${post.author_username || 'community member'}`;
+          showToast(title);
+        }
+      });
+
+      window.addEventListener('nexovanta:collection-change', event => {
+        const change = event.detail;
+        if (change.collection !== 'nx_chat_messages') return;
+        const message = change.record;
+        if (change.eventType !== 'INSERT' || !message ||
+            String(message.sender_id) === String(currentUser.id)) return;
+        const author = NexovantaDB.Users.getById(message.sender_id);
+        const senderName = author ? `@${author.username}` : 'A community member';
+        showToast(`New message from ${senderName}`);
+      });
     }
 
     function renderNotifications() {

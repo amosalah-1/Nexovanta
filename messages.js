@@ -7,6 +7,9 @@
   const session = NexovantaDB.Session.get();
   let selectedConversationId = null;
   let feedbackTimer;
+  let peopleSearchRequest = 0;
+  let peopleResults = [];
+  let peopleSearching = false;
 
   function readCollection(key) {
     try {
@@ -105,13 +108,11 @@
       return;
     }
     heading.hidden = false;
-    const people = NexovantaDB.Users.getAll()
-      .filter(user => user.auth_user_id)
-      .filter(user => String(user.id) !== String(session.id))
-      .filter(user => `${user.full_name || ''} ${user.username || ''} ${user.role || ''}`.toLowerCase().includes(query))
-      .slice(0, 12);
+    const people = peopleResults.slice(0, 12);
     if (!people.length) {
-      container.innerHTML = '<p class="messages-list-empty">No matching people found.</p>';
+      container.innerHTML = `<p class="messages-list-empty">${peopleSearching
+        ? 'Searching Supabase for matching usernames...'
+        : 'No matching people found in Supabase.'}</p>`;
       return;
     }
     container.innerHTML = people.map(user => `<button type="button" class="messages-list-item" data-user-id="${escapeHtml(user.id)}">
@@ -126,6 +127,41 @@
         });
       });
     });
+  }
+
+  async function searchPeople(query) {
+    const requestId = ++peopleSearchRequest;
+    if (!query.trim()) {
+      peopleResults = [];
+      peopleSearching = false;
+      renderPeople();
+      return;
+    }
+    if (query.trim().replace(/^@/, '').length < 2) {
+      peopleResults = [];
+      peopleSearching = false;
+      renderPeople();
+      document.getElementById('peopleList').innerHTML =
+        '<p class="messages-list-empty">Enter at least two characters to search usernames.</p>';
+      return;
+    }
+    peopleResults = [];
+    peopleSearching = true;
+    renderPeople();
+    try {
+      const users = await NexovantaDB.Users.searchByUsername(query);
+      if (requestId !== peopleSearchRequest) return;
+      peopleResults = users.filter(user => String(user.id) !== String(session.id));
+      peopleSearching = false;
+      renderPeople();
+    } catch (error) {
+      console.error('Could not search Supabase profiles:', error);
+      if (requestId === peopleSearchRequest) {
+        peopleSearching = false;
+        document.getElementById('peopleList').innerHTML =
+          '<p class="messages-list-empty">Could not search members. Check your connection and try again.</p>';
+      }
+    }
   }
 
   function renderThread(conversation) {
@@ -292,20 +328,35 @@
     const sendButton = document.querySelector('#messageForm button[type="submit"]');
     sendButton.disabled = true;
     input.disabled = true;
-    try {
-      await saveCollection(MESSAGES_KEY, nextMessages);
-    } catch (error) {
-      localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
-      showFeedback(error.message || 'Message could not be sent. Please try again.');
-      return;
-    } finally {
-      sendButton.disabled = false;
-      input.disabled = false;
-    }
+    const savePromise = saveCollection(MESSAGES_KEY, nextMessages);
     input.value = '';
     input.style.height = 'auto';
     renderThread(conversation);
     renderConversations();
+    try {
+      await savePromise;
+    } catch (error) {
+      localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
+      input.value = body;
+      showFeedback(error.message || 'Message could not be sent. Please try again.');
+      renderThread(conversation);
+      renderConversations();
+    } finally {
+      sendButton.disabled = false;
+      input.disabled = false;
+    }
+  }
+
+  function updateNotificationButton() {
+    const button = document.getElementById('enableNotificationsButton');
+    if (!button) return;
+    if (!('Notification' in window) || Notification.permission === 'denied') {
+      button.hidden = true;
+      return;
+    }
+    const enabled = Notification.permission === 'granted';
+    button.innerHTML = `<i class="fa-${enabled ? 'solid' : 'regular'} fa-bell"></i><span>${enabled ? 'Notifications enabled' : 'Enable notifications'}</span>`;
+    button.disabled = enabled;
   }
 
   async function refreshRemoteChats() {
@@ -336,9 +387,9 @@
   async function initialize() {
     await NexovantaDB.ready;
     if (!session || !session.loggedIn) return;
-    document.getElementById('peopleSearch').addEventListener('input', () => {
+    document.getElementById('peopleSearch').addEventListener('input', event => {
       renderConversations();
-      renderPeople();
+      searchPeople(event.target.value);
     });
     document.getElementById('messageForm').addEventListener('submit', event => {
       sendMessage(event).catch(error => {
@@ -347,6 +398,15 @@
       });
     });
     document.getElementById('newGroupButton').addEventListener('click', openGroupModal);
+    document.getElementById('enableNotificationsButton').addEventListener('click', async () => {
+      if (!('Notification' in window)) {
+        showFeedback('This browser does not support desktop notifications.');
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      updateNotificationButton();
+      if (permission !== 'granted') showFeedback('Notifications were not enabled. You can change this in your browser settings.');
+    });
     document.getElementById('emptyGroupButton').addEventListener('click', openGroupModal);
     document.getElementById('closeGroupModal').addEventListener('click', () => {
       document.getElementById('groupModal').hidden = true;
@@ -373,8 +433,33 @@
     });
     renderConversations();
     renderPeople();
+    updateNotificationButton();
+    window.addEventListener('nexovanta:collection-change', event => {
+      const change = event.detail;
+      if (change.collection !== MESSAGES_KEY) return;
+      const message = change.record;
+      if (!message || change.eventType !== 'INSERT') return;
+      renderConversations();
+      if (selectedConversationId === message.conversation_id) {
+        const conversation = readCollection(CONVERSATIONS_KEY).find(item => item.id === selectedConversationId);
+        if (conversation) renderThread(conversation);
+      }
+      if (String(message.sender_id) !== String(session.id)) {
+        const author = NexovantaDB.Users.getById(message.sender_id);
+        const senderName = author ? displayName(author) : 'Community member';
+        showFeedback(`New message from ${senderName}: ${message.body}`);
+      }
+    });
+    window.addEventListener('nexovanta:collection-change', event => {
+      const change = event.detail;
+      if (change.collection !== 'nx_posts') return;
+      const post = change.record;
+      if (change.eventType !== 'INSERT' || !post || String(post.author_id) === String(session.id)) return;
+      const title = `New post from @${post.author_username || 'community member'}`;
+      const body = String(post.content || '').slice(0, 140);
+      showFeedback(`${title}: ${body}`);
+    });
     await refreshRemoteChats();
-    window.setInterval(refreshRemoteChats, 10000);
   }
 
   initialize().catch(error => {

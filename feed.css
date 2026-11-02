@@ -420,6 +420,17 @@ body.feed-body {
   background: rgba(0, 210, 255, 0.12);
 }
 
+.feed-notif-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.feed-notif-mark-read:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
 .feed-notif-list {
   max-height: 400px;
   overflow-y: auto;

@@ -14,10 +14,10 @@ The browser app uses Supabase Auth for sign-in and Supabase Postgres for platfor
 1. Open **SQL Editor** in the Supabase dashboard.
 2. Paste and run all of `supabase-schema.sql`.
 3. In **Authentication → URL Configuration**, set **Site URL** to your production app URL and add the callback URLs under **Redirect URLs**. Nexovanta sends signup confirmations back to the current host's `/login.html?verified=1`; allow each host/path used for signup, for example `https://nexovanta-seven.vercel.app/login.html`, `http://127.0.0.1:8000/login.html`, and `http://localhost:8000/login.html`. If using another Vercel production or preview domain/local port, add its matching `/login.html` URL as well. The URL must match the browser host where the user registered.
-4. In **Authentication → Providers**, keep Email enabled. Configure email delivery and confirmation behavior for your deployment. With email confirmation enabled, new users must confirm their email before logging in.
+4. In **Authentication → Providers**, keep Email enabled and enable **Allow new users to sign up** in the Auth settings. Configure email delivery and confirmation behavior for your deployment. Student, business, and resident accounts all use the same Supabase Auth login; with email confirmation enabled, new users must confirm their email before logging in.
 5. If you customized the **Confirm signup** email template, keep its link as `{{ .ConfirmationURL }}` so Supabase can validate the one-time token and apply the requested redirect.
 
-The schema creates profiles, record storage for social/events/news/marketplace and private chat data, row-level security policies, and an Auth trigger that creates each new profile. It also creates the public `profile-media` Storage bucket for profile avatars and cover photos. Authenticated users can upload only into their own profile-ID folder; images are restricted to JPG, PNG, or WebP and 5 MB, while profile images are publicly readable. Chat conversations and messages are readable only by their members. The record policies use security-definer checks for cross-record lookups to avoid recursive RLS evaluation. Existing projects should rerun the full schema after updates so new helper functions, buckets, collections, and access policies are installed. New account privileges are always `member`; assign moderator/admin privileges only through trusted SQL.
+The schema creates profiles, record storage for social/events/news/marketplace and private chat data, row-level security policies, and an Auth trigger that creates each new profile. It also adds `nexovanta_records` to the `supabase_realtime` publication so open feed and chat pages receive inserts immediately. It creates the public `profile-media` Storage bucket for profile avatars and cover photos. Authenticated users can upload only into their own profile-ID folder; images are restricted to JPG, PNG, or WebP and 5 MB, while profile images are publicly readable. Chat conversations and messages are readable only by their members. The record policies use security-definer checks for cross-record lookups to avoid recursive RLS evaluation. Existing projects should rerun the full schema after updates so new helper functions, buckets, collections, Realtime publication membership, and access policies are installed. New account privileges are always `member`; assign moderator/admin privileges only through trusted SQL.
 
 ## 3. Promote the initial administrator
 
@@ -68,8 +68,9 @@ It should return `200`. If it returns `500`, check that `.env` has both values, 
 3. Change the test account's avatar and cover photo; confirm objects appear in the `profile-media` bucket and their URLs are saved in `nexovanta_profiles`.
 4. Start a direct message and create a group with another test account.
 5. Confirm chat records appear in `nexovanta_records` and are visible only to their members.
-6. Open the site in another browser/device and confirm public records are shared.
-7. Check browser console and the Nexovanta connection banner for RLS/configuration errors.
+6. Open the site in another browser/device and confirm public records are shared, messages arrive without refreshing, and new posts appear on the feed.
+7. Use **Enable alerts** in the feed notification menu or **Enable notifications** in Messages to allow browser notifications for new posts and messages while the site is open.
+8. Check browser console and the Nexovanta connection banner for RLS/configuration errors.
 
 ## 6. Deploy to Vercel
 
