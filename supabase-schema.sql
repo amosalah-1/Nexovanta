@@ -200,6 +200,54 @@ grant execute on function public.nexovanta_current_user_owns_shop(text) to authe
 revoke all on function public.nexovanta_shop_exists(text) from public, anon;
 grant execute on function public.nexovanta_shop_exists(text) to authenticated;
 
+create or replace function public.nexovanta_follow_profile(p_followed_id text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+set row_security = off
+as $$
+declare
+  follower_profile_id text;
+  inserted_rows integer;
+begin
+  follower_profile_id := public.nexovanta_current_profile_id();
+  if follower_profile_id is null then
+    raise exception 'A signed-in Nexovanta profile is required to follow members';
+  end if;
+  if p_followed_id is null or p_followed_id = follower_profile_id then
+    raise exception 'You cannot follow this profile';
+  end if;
+  if not exists (
+    select 1
+    from public.nexovanta_profiles p
+    where p.id = p_followed_id
+      and p.auth_user_id is not null
+  ) then
+    raise exception 'The followed profile does not have an active account';
+  end if;
+
+  insert into public.nexovanta_records (collection, record_id, owner_id, data)
+  values (
+    'nx_follows',
+    follower_profile_id || '_' || p_followed_id,
+    follower_profile_id,
+    jsonb_build_object(
+      'id', follower_profile_id || '_' || p_followed_id,
+      'follower_id', follower_profile_id,
+      'followed_id', p_followed_id,
+      'created_at', now()
+    )
+  )
+  on conflict (collection, record_id) do nothing;
+  get diagnostics inserted_rows = row_count;
+  return inserted_rows > 0;
+end;
+$$;
+
+revoke all on function public.nexovanta_follow_profile(text) from public, anon;
+grant execute on function public.nexovanta_follow_profile(text) to authenticated;
+
 create or replace function public.nexovanta_create_profile()
 returns trigger
 language plpgsql

@@ -865,11 +865,14 @@ const NexovantaDB = (() => {
         followed_id: String(followedId),
         created_at: now(),
       };
-      const saved = await syncCollection(KEYS.FOLLOWS, [...follows, follow]);
-      if (!saved) {
-        localStorage.setItem(KEYS.FOLLOWS, JSON.stringify(follows));
-        throw new Error('Supabase could not save this follow. Check your connection and try again.');
-      }
+      const { error } = await supabase.rpc('nexovanta_follow_profile', {
+        p_followed_id: String(followedId),
+      });
+      if (error) throw new Error(`Supabase could not save this follow: ${error.message}`);
+      localStorage.setItem(KEYS.FOLLOWS, JSON.stringify([...follows, follow]));
+      const snapshot = remoteSnapshots.get(KEYS.FOLLOWS) || new Map();
+      snapshot.set(follow.id, { data: follow, owner_id: String(followerId) });
+      remoteSnapshots.set(KEYS.FOLLOWS, snapshot);
       const actor = Users.getById(followerId);
       Notifications.create({
         recipient_id: String(followedId),
