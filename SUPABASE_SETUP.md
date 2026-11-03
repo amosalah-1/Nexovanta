@@ -17,7 +17,7 @@ The browser app uses Supabase Auth for sign-in and Supabase Postgres for platfor
 4. In **Authentication → Providers**, keep Email enabled and enable **Allow new users to sign up** in the Auth settings. Configure email delivery and confirmation behavior for your deployment. Student, business, and resident accounts all use the same Supabase Auth login; with email confirmation enabled, new users must confirm their email before logging in.
 5. If you customized the **Confirm signup** email template, keep its link as `{{ .ConfirmationURL }}` so Supabase can validate the one-time token and apply the requested redirect.
 
-The schema creates profiles, record storage for social/events/news/marketplace and private chat data, row-level security policies, and an Auth trigger that creates each new profile. It also adds `nexovanta_records` to the `supabase_realtime` publication so open feed and chat pages receive inserts immediately. It creates the public `profile-media` Storage bucket for profile avatars and cover photos. Authenticated users can upload only into their own profile-ID folder; images are restricted to JPG, PNG, or WebP and 5 MB, while profile images are publicly readable. Chat conversations and messages are readable only by their members. The record policies use security-definer checks for cross-record lookups to avoid recursive RLS evaluation. Existing projects should rerun the full schema after updates so new helper functions, buckets, collections, Realtime publication membership, and access policies are installed. New account privileges are always `member`; assign moderator/admin privileges only through trusted SQL.
+The schema creates profiles, record storage for social/events/news/marketplace, follows, and private chat data; row-level security policies; and an Auth trigger that creates each new profile. It adds `nexovanta_records` to the `supabase_realtime` publication so open feed and chat pages receive inserts immediately. Follows are stored as `nx_follows` records with server-enforced ownership; the profile pages can display and manage followers/following, and following members get a dedicated feed. The Messages profile action opens a private one-to-one Supabase chat. It creates the public `profile-media` Storage bucket for profile avatars and cover photos. Authenticated users can upload only into their own profile-ID folder; images are restricted to JPG, PNG, or WebP and 5 MB, while profile images are publicly readable. Chat conversations and messages are readable only by their members. The record policies use security-definer checks for cross-record lookups to avoid recursive RLS evaluation. Existing projects should rerun the full schema after updates so new helper functions, buckets, collections, Realtime publication membership, and access policies are installed. New account privileges are always `member`; assign moderator/admin privileges only through trusted SQL.
 
 ## 3. Promote the initial administrator
 
@@ -66,11 +66,12 @@ It should return `200`. If it returns `500`, check that `.env` has both values, 
 1. Register a new account using a real email address and sign in.
 2. Create a post, event, marketplace shop/product, and a test order.
 3. Change the test account's avatar and cover photo; confirm objects appear in the `profile-media` bucket and their URLs are saved in `nexovanta_profiles`.
-4. Start a direct message and create a group with another test account.
-5. Confirm chat records appear in `nexovanta_records` and are visible only to their members.
-6. Open the site in another browser/device and confirm public records are shared, messages arrive without refreshing, and new posts appear on the feed.
-7. Use **Enable alerts** in the feed notification menu or **Enable notifications** in Messages to allow browser notifications for new posts and messages while the site is open.
-8. Check browser console and the Nexovanta connection banner for RLS/configuration errors.
+4. Follow a second test account, verify its follower/following counts and connection lists, and check that the new-follower notification appears.
+5. Open **Following** in the feed and confirm posts from followed members appear there.
+6. Start a one-to-one message from a member's profile and confirm the conversation and messages are visible only to its members.
+7. Open the site in another browser/device and confirm messages arrive without refreshing and new posts appear on the feed.
+8. Use **Enable alerts** in the feed notification menu or **Enable notifications** in Messages to allow browser notifications for new posts and messages while the site is open.
+9. Check browser console and the Nexovanta connection banner for RLS/configuration errors.
 
 ## 6. Deploy to Vercel
 

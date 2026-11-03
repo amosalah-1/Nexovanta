@@ -24,7 +24,7 @@ create table if not exists public.nexovanta_profiles (
 create table if not exists public.nexovanta_records (
   collection text not null constraint nexovanta_records_collection_check check (collection in (
     'nx_posts', 'nx_comments', 'nx_reactions', 'nx_events', 'nx_event_rsvps',
-    'nx_saved_posts', 'nx_notifications', 'nx_reports', 'nx_news',
+    'nx_saved_posts', 'nx_notifications', 'nx_reports', 'nx_news', 'nx_follows',
     'nx_chat_conversations', 'nx_chat_messages',
     'nexovanta_shops_db', 'nexovanta_products_db', 'nexovanta_orders_db',
     'nexovanta_reviews_db', 'nexovanta_wishlist_db'
@@ -54,7 +54,7 @@ alter table public.nexovanta_records
 alter table public.nexovanta_records
   add constraint nexovanta_records_collection_check check (collection in (
     'nx_posts', 'nx_comments', 'nx_reactions', 'nx_events', 'nx_event_rsvps',
-    'nx_saved_posts', 'nx_notifications', 'nx_reports', 'nx_news',
+    'nx_saved_posts', 'nx_notifications', 'nx_reports', 'nx_news', 'nx_follows',
     'nx_chat_conversations', 'nx_chat_messages',
     'nexovanta_shops_db', 'nexovanta_products_db', 'nexovanta_orders_db',
     'nexovanta_reviews_db', 'nexovanta_wishlist_db'
@@ -64,6 +64,9 @@ create index if not exists nexovanta_records_collection_owner_idx
   on public.nexovanta_records (collection, owner_id);
 create index if not exists nexovanta_records_data_gin_idx
   on public.nexovanta_records using gin (data);
+create unique index if not exists nexovanta_records_unique_follow_idx
+  on public.nexovanta_records ((data ->> 'follower_id'), (data ->> 'followed_id'))
+  where collection = 'nx_follows';
 
 do $$
 begin
@@ -313,7 +316,7 @@ create policy "Public marketplace and community records are readable"
   on public.nexovanta_records for select
   using (collection in (
     'nx_posts', 'nx_comments', 'nx_reactions', 'nx_events', 'nx_event_rsvps', 'nx_news',
-    'nexovanta_shops_db', 'nexovanta_products_db', 'nexovanta_reviews_db'
+    'nx_follows', 'nexovanta_shops_db', 'nexovanta_products_db', 'nexovanta_reviews_db'
   ));
 
 drop policy if exists "Public posts are readable through Realtime" on public.nexovanta_records;
@@ -355,6 +358,15 @@ create policy "Authenticated users create owned records"
     or (collection = 'nx_events' and data ->> 'organiser_id' = public.nexovanta_current_profile_id())
     or (collection = 'nx_event_rsvps' and data ->> 'user_id' = public.nexovanta_current_profile_id())
     or (collection = 'nx_saved_posts' and data ->> 'user_id' = public.nexovanta_current_profile_id())
+    or (collection = 'nx_follows'
+      and owner_id = public.nexovanta_current_profile_id()
+      and data ->> 'follower_id' = public.nexovanta_current_profile_id()
+      and data ->> 'followed_id' <> public.nexovanta_current_profile_id()
+      and exists (
+        select 1 from public.nexovanta_profiles p
+        where p.id = data ->> 'followed_id'
+          and p.auth_user_id is not null
+      ))
     or (collection = 'nexovanta_wishlist_db' and data ->> 'user_id' = public.nexovanta_current_profile_id())
     or (collection = 'nx_notifications'
       and owner_id = data ->> 'recipient_id'
@@ -392,7 +404,7 @@ drop policy if exists "Owners and moderators update records" on public.nexovanta
 create policy "Owners and moderators update records"
   on public.nexovanta_records for update to authenticated
   using (
-    owner_id = public.nexovanta_current_profile_id()
+    (collection <> 'nx_follows' and owner_id = public.nexovanta_current_profile_id())
     or public.nexovanta_is_moderator()
     or (
       collection = 'nexovanta_orders_db'
@@ -400,7 +412,7 @@ create policy "Owners and moderators update records"
     )
   )
   with check (
-    owner_id = public.nexovanta_current_profile_id()
+    (collection <> 'nx_follows' and owner_id = public.nexovanta_current_profile_id())
     or public.nexovanta_is_moderator()
     or (
       collection = 'nexovanta_orders_db'
@@ -412,6 +424,14 @@ drop policy if exists "Owners and moderators delete records" on public.nexovanta
 create policy "Owners and moderators delete records"
   on public.nexovanta_records for delete to authenticated
   using (owner_id = public.nexovanta_current_profile_id() or public.nexovanta_is_moderator());
+
+drop policy if exists "Members manage their followers" on public.nexovanta_records;
+create policy "Members manage their followers"
+  on public.nexovanta_records for delete to authenticated
+  using (
+    collection = 'nx_follows'
+    and data ->> 'followed_id' = public.nexovanta_current_profile_id()
+  );
 
 create or replace function public.nexovanta_migrate_legacy_data(
   legacy_profiles jsonb,

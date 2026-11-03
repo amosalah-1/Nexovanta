@@ -532,6 +532,19 @@
       gap: 8px;
     }
 
+    .p-stat-item.interactive {
+      padding: 0;
+      color: inherit;
+      border: 0;
+      background: transparent;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .p-stat-item.interactive:hover .p-stat-label {
+      color: var(--accent-cyan);
+    }
+
     .p-stat-num {
       font-family: var(--font-heading);
       font-size: 1.35rem;
@@ -1120,6 +1133,41 @@
       flex-grow: 1;
     }
 
+    .connection-list-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .connection-list-profile {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-main);
+      text-decoration: none;
+    }
+
+    .connection-list-profile > span {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+    }
+
+    .connection-list-profile strong,
+    .connection-list-profile small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .connection-list-profile strong { font-size: .82rem; }
+    .connection-list-profile small { color: var(--text-muted); font-size: .72rem; }
+    .connections-empty { padding: 18px 4px; color: var(--text-muted); font-size: .84rem; }
+
     .profile-modal-footer {
       padding: 16px 28px;
       border-top: 1px solid var(--border-light);
@@ -1466,10 +1514,14 @@
             <span id="statSavedCount" class="p-stat-num">0</span>
             <span class="p-stat-label">Saved Posts</span>
           </div>
-          <div class="p-stat-item">
-            <span id="statFollowersCount" class="p-stat-num">18</span>
+          <button type="button" class="p-stat-item interactive" id="openFollowersButton" aria-label="View followers">
+            <span id="statFollowersCount" class="p-stat-num">0</span>
             <span class="p-stat-label">Followers</span>
-          </div>
+          </button>
+          <button type="button" class="p-stat-item interactive" id="openFollowingButton" aria-label="View following">
+            <span id="statFollowingCount" class="p-stat-num">0</span>
+            <span class="p-stat-label">Following</span>
+          </button>
         </div>
       </div>
     </div>
@@ -1628,6 +1680,23 @@
       </div>
     </div>
   </main>
+
+  <div id="connectionsModal" class="profile-modal-backdrop" hidden>
+    <section class="profile-modal-card" role="dialog" aria-modal="true" aria-labelledby="connectionsModalTitle">
+      <div class="profile-modal-header">
+        <h3 id="connectionsModalTitle">Connections</h3>
+        <button type="button" id="closeConnectionsModal" class="modal-close-btn" aria-label="Close connections"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="profile-modal-body">
+        <div class="profile-tabs-wrapper" role="tablist" aria-label="Followers and following">
+          <button type="button" class="profile-tab-btn active" data-connections-tab="followers" role="tab">Followers</button>
+          <button type="button" class="profile-tab-btn" data-connections-tab="following" role="tab">Following</button>
+        </div>
+        <p id="connectionsFeedback" role="status" hidden></p>
+        <div id="connectionsList" aria-live="polite"></div>
+      </div>
+    </section>
+  </div>
 
   <!-- =================================================================
        EDIT PROFILE MODAL

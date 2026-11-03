@@ -266,6 +266,9 @@
         <button class="feed-filter-pill active" data-tab="for-you">
           <i class="fa-solid fa-wand-magic-sparkles"></i> For You
         </button>
+        <button class="feed-filter-pill" data-tab="following">
+          <i class="fa-solid fa-user-group"></i> Following
+        </button>
         <button class="feed-filter-pill" data-tab="latest">
           <i class="fa-solid fa-clock"></i> Latest
         </button>
@@ -1031,6 +1034,18 @@
 
       window.addEventListener('nexovanta:collection-change', event => {
         const change = event.detail;
+        if (change.collection === 'nx_notifications') {
+          if (change.record && String(change.record.recipient_id) === String(currentUser.id)) {
+            updateNotificationBadge();
+            if (document.getElementById('notifDropdown')?.classList.contains('show')) renderNotifications();
+          }
+          return;
+        }
+        if (change.collection === 'nx_follows') {
+          if (change.record && [change.record.follower_id, change.record.followed_id]
+            .includes(String(currentUser.id))) renderFeed(true);
+          return;
+        }
         if (change.collection !== 'nx_posts') return;
         const post = change.record;
         if (change.eventType === 'INSERT') currentPage = 1;
@@ -1301,6 +1316,9 @@
       // Apply Filter Tabs
       if (currentTab === 'latest') {
         posts = posts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      } else if (currentTab === 'following') {
+        const followingIds = new Set(NexovantaDB.Follows.getFollowingIds(currentUser.id));
+        posts = posts.filter(post => followingIds.has(String(post.author_id)));
       } else if (currentTab === 'news') {
         posts = posts.filter(p => p.post_type === 'news' || p.category === 'news');
       } else if (currentTab === 'videos') {

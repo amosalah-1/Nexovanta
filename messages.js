@@ -460,6 +460,21 @@
       showFeedback(`${title}: ${body}`);
     });
     await refreshRemoteChats();
+    const requestedUsername = new URLSearchParams(window.location.search).get('user');
+    if (requestedUsername) {
+      const username = requestedUsername.trim().replace(/^@/, '').toLowerCase();
+      let person = NexovantaDB.Users.getByUsername(username);
+      if (!person || !person.auth_user_id) {
+        const matches = await NexovantaDB.Users.searchByUsername(username, 25);
+        person = matches.find(user => String(user.username).toLowerCase() === username) || person;
+      }
+      if (person && person.auth_user_id && String(person.id) !== String(session.id)) {
+        await startDirectConversation(person.id);
+      } else {
+        showFeedback(`Could not find an active member named @${username}.`);
+      }
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }
 
   initialize().catch(error => {

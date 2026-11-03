@@ -22,6 +22,7 @@ const NexovantaDB = (() => {
     NEWS:          'nx_news',
     CHAT_CONVERSATIONS: 'nx_chat_conversations',
     CHAT_MESSAGES: 'nx_chat_messages',
+    FOLLOWS: 'nx_follows',
     SESSION:       'nexovanta_user',
     SEEDED:        'nx_seeded_v5',
   };
@@ -30,6 +31,7 @@ const NexovantaDB = (() => {
     KEYS.POSTS, KEYS.COMMENTS, KEYS.REACTIONS, KEYS.EVENTS, KEYS.EVENT_RSVPS,
     KEYS.SAVED_POSTS, KEYS.NOTIFICATIONS, KEYS.REPORTS, KEYS.NEWS,
     KEYS.CHAT_CONVERSATIONS, KEYS.CHAT_MESSAGES,
+    KEYS.FOLLOWS,
     'nexovanta_shops_db', 'nexovanta_products_db', 'nexovanta_orders_db',
     'nexovanta_reviews_db', 'nexovanta_wishlist_db',
   ];
@@ -45,6 +47,7 @@ const NexovantaDB = (() => {
     [KEYS.NEWS]: 'author_id',
     [KEYS.CHAT_CONVERSATIONS]: 'created_by',
     [KEYS.CHAT_MESSAGES]: 'sender_id',
+    [KEYS.FOLLOWS]: 'follower_id',
     nexovanta_shops_db: 'owner_id',
     nexovanta_reviews_db: 'author_id',
     nexovanta_wishlist_db: 'user_id',
@@ -130,6 +133,14 @@ const NexovantaDB = (() => {
     return !!activeProfileId && String(getRecordOwner(collection, record)) === String(activeProfileId);
   }
 
+  function recordCanBeDeleted(collection, record) {
+    if (collection === KEYS.FOLLOWS && activeProfileId) {
+      return String(record.follower_id) === String(activeProfileId) ||
+        String(record.followed_id) === String(activeProfileId);
+    }
+    return recordCanBeWritten(collection, record);
+  }
+
   function syncCollection(collection, records) {
     if (collection === 'nexovanta_wishlist_db') {
       const session = Session.get();
@@ -197,7 +208,7 @@ const NexovantaDB = (() => {
 
     const removed = [];
     previous.forEach((oldRecord, recordId) => {
-      if (!current.has(recordId) && recordCanBeWritten(collection, oldRecord)) removed.push(recordId);
+      if (!current.has(recordId) && recordCanBeDeleted(collection, oldRecord)) removed.push(recordId);
     });
     if (removed.length) {
       const { error } = await supabase.from('nexovanta_records')
@@ -804,6 +815,103 @@ const NexovantaDB = (() => {
         return null;
       }
       return Session.get();
+    },
+  };
+
+  const Follows = {
+    getFollowingIds(userId) {
+      return readAll(KEYS.FOLLOWS)
+        .filter(follow => String(follow.follower_id) === String(userId))
+        .map(follow => String(follow.followed_id));
+    },
+
+    getFollowerIds(userId) {
+      return readAll(KEYS.FOLLOWS)
+        .filter(follow => String(follow.followed_id) === String(userId))
+        .map(follow => String(follow.follower_id));
+    },
+
+    getFollowing(userId) {
+      return Follows.getFollowingIds(userId).map(id => Users.getById(id)).filter(Boolean);
+    },
+
+    getFollowers(userId) {
+      return Follows.getFollowerIds(userId).map(id => Users.getById(id)).filter(Boolean);
+    },
+
+    isFollowing(followerId, followedId) {
+      return readAll(KEYS.FOLLOWS).some(follow =>
+        String(follow.follower_id) === String(followerId) &&
+        String(follow.followed_id) === String(followedId)
+      );
+    },
+
+    async follow(followerId, followedId) {
+      if (!cloudReady || !activeProfileId || String(activeProfileId) !== String(followerId)) {
+        throw new Error('Sign in with your Supabase account before following members.');
+      }
+      if (String(followerId) === String(followedId)) throw new Error('You cannot follow your own account.');
+      const target = Users.getById(followedId);
+      if (!target || !target.auth_user_id) throw new Error('This member does not have an active Supabase account.');
+      if (Follows.isFollowing(followerId, followedId)) return false;
+
+      const follows = readAll(KEYS.FOLLOWS);
+      const follow = {
+        id: `${followerId}_${followedId}`,
+        follower_id: String(followerId),
+        followed_id: String(followedId),
+        created_at: now(),
+      };
+      const saved = await syncCollection(KEYS.FOLLOWS, [...follows, follow]);
+      if (!saved) {
+        localStorage.setItem(KEYS.FOLLOWS, JSON.stringify(follows));
+        throw new Error('Supabase could not save this follow. Check your connection and try again.');
+      }
+      const actor = Users.getById(followerId);
+      Notifications.create({
+        recipient_id: String(followedId),
+        actor_username: actor ? actor.username : Session.get()?.username || 'member',
+        notification_type: 'new_follower',
+        entity_id: String(followerId),
+        message: `@${actor ? actor.username : 'A member'} started following you.`,
+      });
+      return true;
+    },
+
+    async unfollow(followerId, followedId) {
+      if (!cloudReady || !activeProfileId || String(activeProfileId) !== String(followerId)) {
+        throw new Error('Sign in with your Supabase account before managing follows.');
+      }
+      const follows = readAll(KEYS.FOLLOWS);
+      const next = follows.filter(follow =>
+        !(String(follow.follower_id) === String(followerId) &&
+          String(follow.followed_id) === String(followedId))
+      );
+      if (next.length === follows.length) return false;
+      const saved = await syncCollection(KEYS.FOLLOWS, next);
+      if (!saved) {
+        localStorage.setItem(KEYS.FOLLOWS, JSON.stringify(follows));
+        throw new Error('Supabase could not save this change. Check your connection and try again.');
+      }
+      return true;
+    },
+
+    async removeFollower(profileId, followerId) {
+      if (!cloudReady || !activeProfileId || String(activeProfileId) !== String(profileId)) {
+        throw new Error('Sign in as the account owner before removing a follower.');
+      }
+      const follows = readAll(KEYS.FOLLOWS);
+      const next = follows.filter(follow =>
+        !(String(follow.follower_id) === String(followerId) &&
+          String(follow.followed_id) === String(profileId))
+      );
+      if (next.length === follows.length) return false;
+      const saved = await syncCollection(KEYS.FOLLOWS, next);
+      if (!saved) {
+        localStorage.setItem(KEYS.FOLLOWS, JSON.stringify(follows));
+        throw new Error('Supabase could not remove this follower. Check your connection and try again.');
+      }
+      return true;
     },
   };
 
@@ -1420,7 +1528,11 @@ const NexovantaDB = (() => {
           snapshot.set(String(row.record_id), { data: row.data, owner_id: row.owner_id });
           remoteSnapshots.set(collection, snapshot);
         }
-        const change = { collection, eventType: payload.eventType, record: row && row.data };
+        const change = {
+          collection,
+          eventType: payload.eventType,
+          record: row ? row.data : payload.old && payload.old.data ? payload.old.data : null,
+        };
         window.dispatchEvent(new CustomEvent('nexovanta:collection-change', { detail: change }));
         if (typeof onChange === 'function') onChange(change);
       })
@@ -1467,6 +1579,17 @@ const NexovantaDB = (() => {
         `message-${message.id}`
       );
     });
+    subscribeToCollection(KEYS.NOTIFICATIONS, change => {
+      const notification = change.record;
+      if (change.eventType !== 'INSERT' || !notification ||
+          String(notification.recipient_id) !== String(currentSession.id)) return;
+      showPlatformNotification(
+        'Nexovanta notification',
+        notification.message,
+        `notification-${notification.id}`
+      );
+    });
+    subscribeToCollection(KEYS.FOLLOWS);
   }
 
   async function migrateLocalData() {
@@ -1534,6 +1657,7 @@ const NexovantaDB = (() => {
   return {
     Users,
     Session,
+    Follows,
     Posts,
     Comments,
     Reactions,

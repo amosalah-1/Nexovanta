@@ -181,11 +181,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       savedTabBtn.style.display = 'none';
     }
 
-    // Followers
-    const followsKey = `nx_followers_${profileUser.id}`;
-    const storedFollows = JSON.parse(localStorage.getItem(followsKey) || '[]');
-    const baseCount = 14;
-    document.getElementById('statFollowersCount').textContent = baseCount + storedFollows.length;
+    document.getElementById('statFollowersCount').textContent =
+      NexovantaDB.Follows.getFollowerIds(profileUser.id).length;
+    document.getElementById('statFollowingCount').textContent =
+      NexovantaDB.Follows.getFollowingIds(profileUser.id).length;
 
     // Controls Row Visibility
     const ownerRow = document.getElementById('ownerActionsRow');
@@ -203,8 +202,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       publicBanner.style.display = 'none';
 
       // Follow status for visitor
-      const visitorFollows = JSON.parse(localStorage.getItem(`nx_following_${session.id}`) || '[]');
-      const isFollowing = visitorFollows.includes(profileUser.id);
+      const isFollowing = NexovantaDB.Follows.isFollowing(session.id, profileUser.id);
       const followBtn = document.getElementById('btnFollowUser');
       const followText = document.getElementById('followBtnText');
       if (isFollowing) {
@@ -346,34 +344,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ─── Visitor Controls Setup ────────────────────────────────────────────────
   function setupVisitorControls() {
+    setupConnectionsModal();
     // Follow / Unfollow
     const followBtn = document.getElementById('btnFollowUser');
     if (followBtn) {
-      followBtn.addEventListener('click', () => {
-        const myFollowingKey = `nx_following_${session.id}`;
-        let following = JSON.parse(localStorage.getItem(myFollowingKey) || '[]');
-
-        const theirFollowersKey = `nx_followers_${profileUser.id}`;
-        let theirFollowers = JSON.parse(localStorage.getItem(theirFollowersKey) || '[]');
-
-        const idx = following.indexOf(profileUser.id);
-        if (idx === -1) {
-          // Follow
-          following.push(profileUser.id);
-          theirFollowers.push(session.id);
-          localStorage.setItem(myFollowingKey, JSON.stringify(following));
-          localStorage.setItem(theirFollowersKey, JSON.stringify(theirFollowers));
-          if (typeof showToast === 'function') showToast(`Now following @${profileUser.username}!`);
-        } else {
-          // Unfollow
-          following.splice(idx, 1);
-          const fIdx = theirFollowers.indexOf(session.id);
-          if (fIdx !== -1) theirFollowers.splice(fIdx, 1);
-          localStorage.setItem(myFollowingKey, JSON.stringify(following));
-          localStorage.setItem(theirFollowersKey, JSON.stringify(theirFollowers));
-          if (typeof showToast === 'function') showToast(`Unfollowed @${profileUser.username}.`);
+      followBtn.addEventListener('click', async () => {
+        const wasFollowing = NexovantaDB.Follows.isFollowing(session.id, profileUser.id);
+        followBtn.disabled = true;
+        try {
+          if (wasFollowing) {
+            await NexovantaDB.Follows.unfollow(session.id, profileUser.id);
+            if (typeof showToast === 'function') showToast(`Unfollowed @${profileUser.username}.`);
+          } else {
+            await NexovantaDB.Follows.follow(session.id, profileUser.id);
+            if (typeof showToast === 'function') showToast(`Now following @${profileUser.username}!`);
+          }
+          renderProfileHeader();
+          renderConnectionsList();
+        } catch (error) {
+          console.error('Could not update follow status:', error);
+          if (typeof showToast === 'function') showToast(error.message || 'Could not update your follow status.');
+        } finally {
+          followBtn.disabled = false;
         }
-        renderProfileHeader();
       });
     }
 
@@ -381,10 +374,106 @@ document.addEventListener('DOMContentLoaded', async () => {
     const messageBtn = document.getElementById('btnMessageUser');
     if (messageBtn) {
       messageBtn.addEventListener('click', () => {
-        if (typeof showToast === 'function') {
-          showToast(`Direct message channel opened with @${profileUser.username}.`);
+        window.location.href = `messages.html?user=${encodeURIComponent(profileUser.username)}`;
+      });
+    }
+
+    function setupConnectionsModal() {
+      const modal = document.getElementById('connectionsModal');
+      let activeConnectionsTab = 'followers';
+
+      document.getElementById('openFollowersButton').addEventListener('click', () => {
+        activeConnectionsTab = 'followers';
+        modal.hidden = false;
+        modal.classList.add('active');
+        renderConnectionsList();
+      });
+      document.getElementById('openFollowingButton').addEventListener('click', () => {
+        activeConnectionsTab = 'following';
+        modal.hidden = false;
+        modal.classList.add('active');
+        renderConnectionsList();
+      });
+      document.getElementById('closeConnectionsModal').addEventListener('click', closeConnectionsModal);
+      modal.addEventListener('click', event => {
+        if (event.target === modal) closeConnectionsModal();
+      });
+      modal.querySelectorAll('[data-connections-tab]').forEach(button => {
+        button.addEventListener('click', () => {
+          activeConnectionsTab = button.dataset.connectionsTab;
+          renderConnectionsList();
+        });
+      });
+      document.getElementById('connectionsList').addEventListener('click', async event => {
+        const actionButton = event.target.closest('[data-follow-action]');
+        if (!actionButton) return;
+        const userId = actionButton.dataset.userId;
+        actionButton.disabled = true;
+        try {
+          if (actionButton.dataset.followAction === 'unfollow') {
+            await NexovantaDB.Follows.unfollow(session.id, userId);
+          } else {
+            await NexovantaDB.Follows.removeFollower(session.id, userId);
+          }
+          renderProfileHeader();
+          renderConnectionsList();
+        } catch (error) {
+          console.error('Could not manage follower:', error);
+          const feedback = document.getElementById('connectionsFeedback');
+          feedback.textContent = error.message || 'Could not update this connection.';
+          feedback.hidden = false;
+          actionButton.disabled = false;
         }
       });
+      window.addEventListener('nexovanta:collection-change', event => {
+        if (event.detail.collection !== 'nx_follows') return;
+        if ([profileUser.id, session.id].some(id =>
+          event.detail.record &&
+          [event.detail.record.follower_id, event.detail.record.followed_id].includes(String(id))
+        )) {
+          renderProfileHeader();
+          if (!modal.hidden) renderConnectionsList();
+        }
+      });
+
+      function closeConnectionsModal() {
+        modal.classList.remove('active');
+        modal.hidden = true;
+      }
+
+      function renderConnectionsList() {
+        const title = document.getElementById('connectionsModalTitle');
+        const list = document.getElementById('connectionsList');
+        const feedback = document.getElementById('connectionsFeedback');
+        const isFollowers = activeConnectionsTab === 'followers';
+        const connections = isFollowers
+          ? NexovantaDB.Follows.getFollowers(profileUser.id)
+          : NexovantaDB.Follows.getFollowing(profileUser.id);
+        title.textContent = isFollowers ? 'Followers' : 'Following';
+        feedback.hidden = true;
+        modal.querySelectorAll('[data-connections-tab]').forEach(button => {
+          const selected = button.dataset.connectionsTab === activeConnectionsTab;
+          button.classList.toggle('active', selected);
+          button.setAttribute('aria-selected', String(selected));
+        });
+        if (!connections.length) {
+          list.innerHTML = `<p class="connections-empty">No ${isFollowers ? 'followers' : 'following'} yet.</p>`;
+          return;
+        }
+        list.innerHTML = connections.map(user => {
+          const canManage = isOwner && !isViewingAsPublic;
+          const action = canManage
+            ? `<button type="button" class="btn btn-outline btn-sm" data-follow-action="${isFollowers ? 'remove' : 'unfollow'}" data-user-id="${escapeHtml(String(user.id))}">${isFollowers ? 'Remove' : 'Unfollow'}</button>`
+            : '';
+          return `<div class="connection-list-row">
+            <a class="connection-list-profile" href="profile.html?user=${encodeURIComponent(user.username)}">
+              ${NexovantaDB.getAvatarHtml(user.username, user.avatar_url, 38)}
+              <span><strong>${escapeHtml(user.full_name || user.username)}</strong><small>@${escapeHtml(user.username)}</small></span>
+            </a>
+            ${action}
+          </div>`;
+        }).join('');
+      }
     }
 
     // Share Profile Button
@@ -1218,6 +1307,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         </li>
       `).join('');
     };
+
+    window.addEventListener('nexovanta:collection-change', event => {
+      if (event.detail.collection === 'nx_notifications' &&
+          event.detail.record &&
+          String(event.detail.record.recipient_id) === String(curUser.id)) {
+        refreshNotifs();
+      }
+    });
 
     bellBtn.addEventListener('click', (e) => {
       e.stopPropagation();
