@@ -222,9 +222,8 @@ begin
     select 1
     from public.nexovanta_profiles p
     where p.id = p_followed_id
-      and p.auth_user_id is not null
   ) then
-    raise exception 'The followed profile does not have an active account';
+    raise exception 'The followed profile does not exist';
   end if;
 
   insert into public.nexovanta_records (collection, record_id, owner_id, data)

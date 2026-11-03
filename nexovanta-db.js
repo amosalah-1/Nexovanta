@@ -855,7 +855,7 @@ const NexovantaDB = (() => {
       }
       if (String(followerId) === String(followedId)) throw new Error('You cannot follow your own account.');
       const target = Users.getById(followedId);
-      if (!target || !target.auth_user_id) throw new Error('This member does not have an active Supabase account.');
+      if (!target) throw new Error('This member profile could not be found.');
       if (Follows.isFollowing(followerId, followedId)) return false;
 
       const follows = readAll(KEYS.FOLLOWS);
