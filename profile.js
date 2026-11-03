@@ -344,7 +344,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ─── Visitor Controls Setup ────────────────────────────────────────────────
   function setupVisitorControls() {
-    setupConnectionsModal();
+    const renderConnectionsList = setupConnectionsModal();
     // Follow / Unfollow
     const followBtn = document.getElementById('btnFollowUser');
     if (followBtn) {
@@ -474,6 +474,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>`;
         }).join('');
       }
+
+      return renderConnectionsList;
     }
 
     // Share Profile Button
