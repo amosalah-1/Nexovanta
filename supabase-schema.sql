@@ -409,11 +409,7 @@ create policy "Authenticated users create owned records"
     or (collection = 'nexovanta_wishlist_db' and data ->> 'user_id' = public.nexovanta_current_profile_id())
     or (collection = 'nx_notifications'
       and owner_id = data ->> 'recipient_id'
-      and exists (
-        select 1 from public.nexovanta_profiles p
-        where p.auth_user_id = (select auth.uid())
-          and p.username = data ->> 'actor_username'
-      ))
+      and data ->> 'actor_id' = public.nexovanta_current_profile_id())
     or (collection = 'nx_reports' and data ->> 'reporter_id' = public.nexovanta_current_profile_id())
     or (collection = 'nx_news' and data ->> 'author_id' = public.nexovanta_current_profile_id())
     or (

@@ -128,7 +128,10 @@ const NexovantaDB = (() => {
     if (session && ['admin', 'moderator'].includes(session.account_role)) return true;
     if (collection === 'nexovanta_orders_db') return true;
     if (collection === KEYS.NOTIFICATIONS) {
-      return !!session && record.actor_username === session.username;
+      return !!activeProfileId && (
+        String(record.actor_id) === String(activeProfileId) ||
+        String(record.recipient_id) === String(activeProfileId)
+      );
     }
     return !!activeProfileId && String(getRecordOwner(collection, record)) === String(activeProfileId);
   }
@@ -1266,6 +1269,7 @@ const NexovantaDB = (() => {
       const notif = {
         id: uuid(),
         recipient_id: data.recipient_id,
+        actor_id: activeProfileId,
         actor_username: data.actor_username,
         notification_type: data.notification_type,
         entity_id: data.entity_id,
