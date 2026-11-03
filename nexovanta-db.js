@@ -201,7 +201,10 @@ const NexovantaDB = (() => {
 
     if (changed.length) {
       const { error } = await supabase.from('nexovanta_records')
-        .upsert(changed, { onConflict: 'collection,record_id' });
+        .upsert(changed, {
+          onConflict: 'collection,record_id',
+          ignoreDuplicates: collection === KEYS.FOLLOWS,
+        });
       if (error) throw error;
       changed.forEach(row => snapshot.set(row.record_id, { data: row.data, owner_id: row.owner_id }));
     }
