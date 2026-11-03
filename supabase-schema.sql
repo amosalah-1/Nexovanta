@@ -218,14 +218,6 @@ begin
   if p_followed_id is null or p_followed_id = follower_profile_id then
     raise exception 'You cannot follow this profile';
   end if;
-  if not exists (
-    select 1
-    from public.nexovanta_profiles p
-    where p.id = p_followed_id
-  ) then
-    raise exception 'The followed profile does not exist';
-  end if;
-
   insert into public.nexovanta_records (collection, record_id, owner_id, data)
   values (
     'nx_follows',
