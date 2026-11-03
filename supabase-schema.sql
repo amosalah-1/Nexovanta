@@ -209,6 +209,8 @@ set row_security = off
 as $$
 declare
   follower_profile_id text;
+  follower_username text;
+  notification_id text;
   inserted_rows integer;
 begin
   follower_profile_id := public.nexovanta_current_profile_id();
@@ -218,6 +220,11 @@ begin
   if p_followed_id is null or p_followed_id = follower_profile_id then
     raise exception 'You cannot follow this profile';
   end if;
+  select coalesce(p.username, 'member')
+  into follower_username
+  from public.nexovanta_profiles p
+  where p.id = follower_profile_id;
+
   insert into public.nexovanta_records (collection, record_id, owner_id, data)
   values (
     'nx_follows',
@@ -232,6 +239,28 @@ begin
   )
   on conflict (collection, record_id) do nothing;
   get diagnostics inserted_rows = row_count;
+
+  if inserted_rows > 0 then
+    notification_id := gen_random_uuid()::text;
+    insert into public.nexovanta_records (collection, record_id, owner_id, data)
+    values (
+      'nx_notifications',
+      notification_id,
+      p_followed_id,
+      jsonb_build_object(
+        'id', notification_id,
+        'recipient_id', p_followed_id,
+        'actor_id', follower_profile_id,
+        'actor_username', follower_username,
+        'notification_type', 'new_follower',
+        'entity_id', follower_profile_id,
+        'message', '@' || follower_username || ' started following you.',
+        'read_at', null,
+        'created_at', now()
+      )
+    );
+  end if;
+
   return inserted_rows > 0;
 end;
 $$;

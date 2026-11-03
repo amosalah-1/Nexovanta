@@ -876,14 +876,6 @@ const NexovantaDB = (() => {
       const snapshot = remoteSnapshots.get(KEYS.FOLLOWS) || new Map();
       snapshot.set(follow.id, { data: follow, owner_id: String(followerId) });
       remoteSnapshots.set(KEYS.FOLLOWS, snapshot);
-      const actor = Users.getById(followerId);
-      Notifications.create({
-        recipient_id: String(followedId),
-        actor_username: actor ? actor.username : Session.get()?.username || 'member',
-        notification_type: 'new_follower',
-        entity_id: String(followerId),
-        message: `@${actor ? actor.username : 'A member'} started following you.`,
-      });
       return true;
     },
 
