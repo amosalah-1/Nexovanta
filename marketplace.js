@@ -19,6 +19,8 @@
     selectedProductForModal: null,
     activeVariant: '',
     modalQuantity: 1,
+    galleryViewerImages: [],
+    galleryViewerIndex: 0,
     activeSellerDashboardShopId: 'shop-2' // Default to Oloika Electronics for instant testing
   };
 
@@ -238,7 +240,7 @@
 
           <!-- Illuminated Shop Signage Plate -->
           <div class="storefront-signage-plate">
-            <img src="${escapeHtml(shop.logo_url)}" alt="${escapeHtml(shop.name)}" class="storefront-logo-circle" onerror="this.src='Logo.jpg'">
+            <img src="${escapeHtml((shop.logo_image && shop.logo_image.url) || shop.logo_url)}" alt="${escapeHtml(shop.name)}" class="storefront-logo-circle" onerror="this.src='Logo.jpg'">
             <div class="storefront-sign-text">
               <h4 class="storefront-sign-title">${escapeHtml(shop.name)}</h4>
               <p class="storefront-sign-tagline">${escapeHtml(shop.tagline)}</p>
@@ -251,7 +253,7 @@
 
           <!-- Display Window -->
           <div class="storefront-display-window">
-            <img src="${escapeHtml(shop.banner_url)}" alt="${escapeHtml(shop.name)}" class="storefront-window-img" loading="lazy" onerror="this.src='Logo.jpg'">
+            <img src="${escapeHtml((shop.banner_image && shop.banner_image.url) || shop.banner_url)}" alt="${escapeHtml(shop.name)}" class="storefront-window-img" loading="lazy" onerror="this.src='Logo.jpg'">
             <div class="storefront-window-overlay">
               <span class="storefront-location-tag">
                 <i class="fa-solid fa-location-dot" style="color:var(--accent-cyan);"></i>
@@ -365,7 +367,7 @@
       return `
         <div class="product-item-card" style="border-top: 3px solid ${shop.awning_color || 'var(--accent-cyan)'};">
           <div class="product-card-media btn-visit-shop" data-shop="${escapeHtml(shop.slug)}">
-            <img src="${escapeHtml(shop.banner_url)}" alt="${escapeHtml(shop.name)}" class="product-card-img" loading="lazy" onerror="this.src='Logo.jpg'">
+            <img src="${escapeHtml((shop.banner_image && shop.banner_image.url) || shop.banner_url)}" alt="${escapeHtml(shop.name)}" class="product-card-img" loading="lazy" onerror="this.src='Logo.jpg'">
             <span class="product-card-badge">
               <i class="fa-solid fa-location-dot"></i> ${escapeHtml(shop.area || 'Chuka')}
             </span>
@@ -373,7 +375,7 @@
 
           <div class="product-card-body">
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-              <img src="${escapeHtml(shop.logo_url)}" alt="${escapeHtml(shop.name)}" style="width:36px; height:36px; border-radius:8px; object-fit:cover; border:1px solid var(--border-light);" onerror="this.src='Logo.jpg'">
+              <img src="${escapeHtml((shop.logo_image && shop.logo_image.url) || shop.logo_url)}" alt="${escapeHtml(shop.name)}" style="width:36px; height:36px; border-radius:8px; object-fit:cover; border:1px solid var(--border-light);" onerror="this.src='Logo.jpg'">
               <div>
                 <h4 style="font-size:0.98rem; font-weight:800; color:#fff; line-height:1.2;">${escapeHtml(shop.name)}</h4>
                 <span style="font-size:0.75rem; color:var(--text-dim);">${escapeHtml(shop.location)}</span>
@@ -424,7 +426,7 @@
     container.innerHTML = shops.map(shop => `
       <div class="product-item-card btn-visit-shop" data-shop="${escapeHtml(shop.slug)}" style="cursor:pointer;">
         <div class="product-card-media">
-          <img src="${escapeHtml(shop.banner_url)}" alt="${escapeHtml(shop.name)}" class="product-card-img" loading="lazy" onerror="this.src='Logo.jpg'">
+          <img src="${escapeHtml((shop.banner_image && shop.banner_image.url) || shop.banner_url)}" alt="${escapeHtml(shop.name)}" class="product-card-img" loading="lazy" onerror="this.src='Logo.jpg'">
           <span class="product-card-badge" style="background:rgba(245, 158, 11, 0.25); color:#fbbf24; border-color:#fbbf24;">
             <i class="fa-solid fa-certificate"></i> Verified Merchant
           </span>
@@ -504,7 +506,7 @@
     return `
       <div class="product-item-card" data-product-id="${product.id}">
         <div class="product-card-media">
-          <img src="${escapeHtml((product.image_urls && product.image_urls[0]) || 'Logo.jpg')}" alt="${escapeHtml(product.name)}" class="product-card-img" loading="lazy" onerror="this.src='Logo.jpg'">
+          <img src="${escapeHtml(getProductImageList(product)[0]?.thumbnail_url || getProductImageList(product)[0]?.url || 'Logo.jpg')}" alt="${escapeHtml(product.name)}" class="product-card-img" loading="lazy" onerror="this.src='Logo.jpg'">
           ${product.badge ? `<span class="product-card-badge">${escapeHtml(product.badge)}</span>` : ''}
           <button class="product-wishlist-btn ${isWish ? 'active' : ''}" data-wishlist-id="${product.id}" title="Save to Favourites">
             <i class="fa-${isWish ? 'solid' : 'regular'} fa-heart"></i>
@@ -539,6 +541,15 @@
         </div>
       </div>
     `;
+  }
+
+  function getProductImageList(product) {
+    if (Array.isArray(product.images) && product.images.length) return product.images;
+    return (product.image_urls || []).map((url, index) => ({
+      id: `${product.id}-image-${index}`,
+      url,
+      thumbnail_url: url
+    }));
   }
 
   function attachProductCardEvents(parentElement) {
@@ -611,9 +622,9 @@
     const callBtn = document.getElementById('shopDetailCall');
 
     if (headerBanner) {
-      headerBanner.style.backgroundImage = `url('${shop.banner_url || "Logo.jpg"}')`;
+      headerBanner.style.backgroundImage = `url('${shop.banner_image?.url || shop.banner_url || "Logo.jpg"}')`;
     }
-    if (avatar) avatar.src = shop.logo_url || 'Logo.jpg';
+    if (avatar) avatar.src = (shop.logo_image && shop.logo_image.url) || shop.logo_url || 'Logo.jpg';
     if (nameEl) nameEl.textContent = shop.name;
     if (taglineEl) taglineEl.textContent = shop.tagline;
     if (locationEl) locationEl.innerHTML = `<i class="fa-solid fa-location-dot"></i> ${escapeHtml(shop.location)}`;
@@ -658,14 +669,21 @@
     const productsContainer = document.getElementById('shopProductsGrid');
     const aboutContainer = document.getElementById('shopAboutPanel');
     const reviewsContainer = document.getElementById('shopReviewsPanel');
+    const galleryContainer = document.getElementById('shopGalleryPanel');
 
     // Default to 'all'
     renderShopProducts(shop.id, 'all');
     renderShopAbout(shop);
     renderShopReviews(shop.id);
+    renderShopGallery(shop);
+    if (productsContainer) productsContainer.style.display = 'grid';
+    if (aboutContainer) aboutContainer.style.display = 'none';
+    if (reviewsContainer) reviewsContainer.style.display = 'none';
+    if (galleryContainer) galleryContainer.style.display = 'none';
+    tabs.forEach(tab => tab.classList.toggle('active', tab.getAttribute('data-shop-tab') === 'all'));
 
     tabs.forEach(tab => {
-      tab.addEventListener('click', () => {
+      tab.onclick = () => {
         tabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
 
@@ -675,18 +693,92 @@
           if (productsContainer) productsContainer.style.display = 'none';
           if (aboutContainer) aboutContainer.style.display = 'block';
           if (reviewsContainer) reviewsContainer.style.display = 'none';
+          if (galleryContainer) galleryContainer.style.display = 'none';
         } else if (tabType === 'reviews') {
           if (productsContainer) productsContainer.style.display = 'none';
           if (aboutContainer) aboutContainer.style.display = 'none';
           if (reviewsContainer) reviewsContainer.style.display = 'block';
+          if (galleryContainer) galleryContainer.style.display = 'none';
+        } else if (tabType === 'gallery') {
+          if (productsContainer) productsContainer.style.display = 'none';
+          if (aboutContainer) aboutContainer.style.display = 'none';
+          if (reviewsContainer) reviewsContainer.style.display = 'none';
+          if (galleryContainer) galleryContainer.style.display = 'block';
         } else {
           if (productsContainer) productsContainer.style.display = 'grid';
           if (aboutContainer) aboutContainer.style.display = 'none';
           if (reviewsContainer) reviewsContainer.style.display = 'none';
+          if (galleryContainer) galleryContainer.style.display = 'none';
           renderShopProducts(shop.id, tabType);
         }
-      });
+      };
     });
+  }
+
+  function renderShopGallery(shop) {
+    const container = document.getElementById('shopGalleryPanel');
+    if (!container) return;
+    const images = Array.isArray(shop.gallery_images)
+      ? shop.gallery_images.filter(image => image && image.url)
+      : [];
+    if (!images.length) {
+      container.innerHTML = `
+        <div class="sf-section-card" style="text-align:center;color:var(--text-muted);">
+          <i class="fa-solid fa-images" style="font-size:2rem;color:var(--accent-cyan);"></i>
+          <h3 style="color:#fff;margin:12px 0 6px;">Shop Gallery</h3>
+          <p>This shop has not added photos yet.</p>
+        </div>`;
+      return;
+    }
+    container.innerHTML = `
+      <h2 style="font-family:var(--font-heading);color:#fff;">Shop Gallery</h2>
+      <div class="shop-gallery-grid">
+        ${images.map((image, index) => `
+          <button type="button" class="shop-gallery-card" data-gallery-index="${index}" aria-label="View photo: ${escapeHtml(image.caption || image.alt_text || `Shop photo ${index + 1}`)}">
+            <img src="${escapeHtml(image.thumbnail_url || image.url)}" alt="${escapeHtml(image.alt_text || image.caption || shop.name)}" loading="lazy">
+            ${image.caption ? `<span class="shop-gallery-caption">${escapeHtml(image.caption)}</span>` : ''}
+          </button>`).join('')}
+      </div>`;
+    container.querySelectorAll('.shop-gallery-card').forEach(button => {
+      button.addEventListener('click', () => openShopGalleryViewer(images, Number(button.dataset.galleryIndex)));
+    });
+  }
+
+  function openShopGalleryViewer(images, index) {
+    state.galleryViewerImages = images;
+    state.galleryViewerIndex = index;
+    renderShopGalleryViewer();
+    const viewer = document.getElementById('shopGalleryViewer');
+    if (viewer) {
+      viewer.classList.add('active');
+      viewer.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      document.getElementById('shopGalleryViewerClose')?.focus();
+    }
+  }
+
+  function renderShopGalleryViewer() {
+    const image = state.galleryViewerImages[state.galleryViewerIndex];
+    if (!image) return;
+    const imageElement = document.getElementById('shopGalleryViewerImage');
+    const caption = document.getElementById('shopGalleryViewerCaption');
+    if (imageElement) {
+      imageElement.src = image.url;
+      imageElement.alt = image.alt_text || image.caption || 'Shop photo';
+    }
+    if (caption) caption.textContent = image.caption || '';
+    const multiple = state.galleryViewerImages.length > 1;
+    document.getElementById('shopGalleryViewerPrev').style.display = multiple ? '' : 'none';
+    document.getElementById('shopGalleryViewerNext').style.display = multiple ? '' : 'none';
+  }
+
+  function closeShopGalleryViewer() {
+    const viewer = document.getElementById('shopGalleryViewer');
+    if (viewer) {
+      viewer.classList.remove('active');
+      viewer.setAttribute('aria-hidden', 'true');
+    }
+    document.body.style.overflow = '';
   }
 
   function renderShopProducts(shopId, filterType = 'all') {
@@ -912,8 +1004,9 @@
     const waInquiryBtn = document.getElementById('modalWhatsAppInquiry');
 
     const shop = window.MarketplaceStore.getShopById(product.shop_id) || { name: 'Chuka Merchant', slug: '' };
+    const productImages = getProductImageList(product);
 
-    if (mainImg) mainImg.src = (product.image_urls && product.image_urls[0]) || 'Logo.jpg';
+    if (mainImg) mainImg.src = (productImages[0] && productImages[0].url) || 'Logo.jpg';
     if (titleEl) titleEl.textContent = product.name;
     if (priceEl) priceEl.textContent = `KES ${product.price.toLocaleString()}`;
     if (origPriceEl) {
@@ -936,9 +1029,9 @@
 
     // Thumbnails
     if (thumbStrip) {
-      if (product.image_urls && product.image_urls.length > 1) {
-        thumbStrip.innerHTML = product.image_urls.map((url, idx) => `
-          <img src="${escapeHtml(url)}" class="modal-thumb-item ${idx === 0 ? 'active' : ''}" data-idx="${idx}" alt="Thumb" onerror="this.src='Logo.jpg'">
+      if (productImages.length > 1) {
+        thumbStrip.innerHTML = productImages.map((image, idx) => `
+          <img src="${escapeHtml(image.thumbnail_url || image.url)}" class="modal-thumb-item ${idx === 0 ? 'active' : ''}" data-idx="${idx}" alt="${escapeHtml(image.alt_text || `Photo ${idx + 1}`)}" loading="lazy" onerror="this.src='Logo.jpg'">
         `).join('');
 
         thumbStrip.querySelectorAll('.modal-thumb-item').forEach(th => {
@@ -946,7 +1039,7 @@
             thumbStrip.querySelectorAll('.modal-thumb-item').forEach(t => t.classList.remove('active'));
             th.classList.add('active');
             const idx = th.getAttribute('data-idx');
-            if (mainImg) mainImg.src = product.image_urls[idx];
+            if (mainImg) mainImg.src = productImages[idx].url || productImages[idx].thumbnail_url;
           });
         });
       } else {
@@ -1429,7 +1522,7 @@
           <tr>
             <td>
               <div style="display:flex; align-items:center; gap:10px;">
-                <img src="${escapeHtml((p.image_urls && p.image_urls[0]) || 'Logo.jpg')}" style="width:36px; height:36px; border-radius:6px; object-fit:cover;" onerror="this.src='Logo.jpg'">
+                <img src="${escapeHtml(getProductImageList(p)[0]?.thumbnail_url || getProductImageList(p)[0]?.url || 'Logo.jpg')}" style="width:36px; height:36px; border-radius:6px; object-fit:cover;" loading="lazy" onerror="this.src='Logo.jpg'">
                 <strong>${escapeHtml(p.name)}</strong>
               </div>
             </td>
@@ -1516,7 +1609,7 @@
         matchedProds.forEach(p => {
           html += `
             <a href="#" class="suggestion-item btn-suggest-prod" data-id="${escapeHtml(p.id)}">
-              <img src="${escapeHtml((p.image_urls && p.image_urls[0]) || 'Logo.jpg')}" class="suggestion-thumb" alt="${escapeHtml(p.name)}" onerror="this.src='Logo.jpg'">
+              <img src="${escapeHtml(getProductImageList(p)[0]?.thumbnail_url || getProductImageList(p)[0]?.url || 'Logo.jpg')}" class="suggestion-thumb" alt="${escapeHtml(p.name)}" loading="lazy" onerror="this.src='Logo.jpg'">
               <div class="suggestion-meta">
                 <h4>${escapeHtml(p.name)}</h4>
                 <p>KES ${p.price.toLocaleString()}</p>
@@ -1648,6 +1741,33 @@
     // Product Detail Modal Close
     const closeProdModal = document.getElementById('modalCloseProductDetail');
     if (closeProdModal) closeProdModal.addEventListener('click', closeProductModal);
+
+    const galleryViewer = document.getElementById('shopGalleryViewer');
+    const galleryClose = document.getElementById('shopGalleryViewerClose');
+    const galleryPrevious = document.getElementById('shopGalleryViewerPrev');
+    const galleryNext = document.getElementById('shopGalleryViewerNext');
+    if (galleryClose) galleryClose.addEventListener('click', closeShopGalleryViewer);
+    if (galleryViewer) galleryViewer.addEventListener('click', event => {
+      if (event.target === galleryViewer) closeShopGalleryViewer();
+    });
+    if (galleryPrevious) galleryPrevious.addEventListener('click', () => {
+      const length = state.galleryViewerImages.length;
+      if (!length) return;
+      state.galleryViewerIndex = (state.galleryViewerIndex - 1 + length) % length;
+      renderShopGalleryViewer();
+    });
+    if (galleryNext) galleryNext.addEventListener('click', () => {
+      const length = state.galleryViewerImages.length;
+      if (!length) return;
+      state.galleryViewerIndex = (state.galleryViewerIndex + 1) % length;
+      renderShopGalleryViewer();
+    });
+    document.addEventListener('keydown', event => {
+      if (!galleryViewer?.classList.contains('active')) return;
+      if (event.key === 'Escape') closeShopGalleryViewer();
+      if (event.key === 'ArrowLeft') galleryPrevious?.click();
+      if (event.key === 'ArrowRight') galleryNext?.click();
+    });
 
     // Shop Back Button
     const backBtn = document.getElementById('shopBackToMarket');

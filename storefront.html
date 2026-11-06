@@ -180,6 +180,21 @@
       object-fit: cover;
       border: 2px solid var(--accent-cyan);
     }
+    .sf-image-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    .sf-image-previews, .sf-gallery-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; margin:12px 0; }
+    .sf-image-dropzone { min-height:76px; padding:10px; border:1px dashed rgba(0,210,255,.28); border-radius:12px; }
+    .sf-image-drop-active { border-color:var(--accent-cyan); background:rgba(0,210,255,.08); }
+    .sf-image-preview, .sf-gallery-item { position:relative; border:1px solid var(--border-light); border-radius:12px; padding:8px; background:rgba(255,255,255,.04); }
+    .sf-image-preview img, .sf-gallery-item img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:8px; display:block; }
+    .sf-image-preview label { display:flex; align-items:center; gap:6px; margin-top:8px; font-size:.78rem; color:#cbd5e1; }
+    .sf-gallery-item input[type="text"] { width:100%; margin-top:8px; }
+    .sf-gallery-controls { display:flex; gap:6px; margin-top:8px; }
+    .sf-upload-status { min-height:1.3em; color:var(--accent-cyan); font-size:.85rem; }
+    .sf-remove-image { color:#fca5a5!important; }
+    @media (max-width:640px) {
+      .sf-image-previews, .sf-gallery-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .sf-section-card { padding:20px; }
+    }
 
     /* ── Tab Nav ─────────────────────────────────────────────────── */
     .sf-tab-nav {
@@ -313,6 +328,17 @@
           <button onclick="logoutNexovanta()" class="btn btn-sm btn-outline" style="padding:4px 10px;margin-left:6px;font-size:0.72rem;">Logout</button>
         </div>
       </div>
+      <div class="auth-form-group">
+        <label class="auth-label">Product Photos</label>
+        <div class="sf-image-actions">
+          <label class="btn btn-outline btn-sm" for="productFileInput"><i class="fa-solid fa-upload"></i> Upload from Device</label>
+          <label class="btn btn-outline btn-sm" for="productCameraInput"><i class="fa-solid fa-camera"></i> Take Photo</label>
+          <input id="productFileInput" type="file" accept="image/*" multiple hidden>
+          <input id="productCameraInput" type="file" accept="image/*" capture="environment" multiple hidden>
+        </div>
+        <div id="productImagePreviews" class="sf-image-previews sf-image-dropzone" role="region" aria-label="Drop product photos here"></div>
+        <div id="productUploadStatus" class="sf-upload-status" role="status" aria-live="polite"></div>
+      </div>
     </div>
   </header>
 
@@ -407,6 +433,9 @@
           <button class="sf-tab-btn" data-tab="profile">
             <i class="fa-solid fa-pen-to-square"></i> Edit Shop Profile
           </button>
+          <button class="sf-tab-btn" data-tab="gallery">
+            <i class="fa-solid fa-images"></i> Shop Gallery
+          </button>
         </div>
 
         <!-- ────── PRODUCTS PANEL ────── -->
@@ -467,22 +496,39 @@
 
               <!-- Banner Preview -->
               <div class="auth-form-group">
-                <label class="auth-label">Banner Image URL</label>
+                <label class="auth-label">Banner Image</label>
                 <img id="bannerPreviewImg" class="sf-banner-preview" src="Logo.jpg" alt="Banner Preview">
                 <div class="auth-input-wrap">
                   <i class="fa-solid fa-image auth-input-icon"></i>
-                  <input type="url" id="editBannerUrl" class="auth-input" placeholder="https://images.unsplash.com/...">
+                  <input type="url" id="editBannerUrl" class="auth-input" placeholder="Optional image URL">
                 </div>
+                <div class="sf-image-actions" style="margin-top:8px;">
+                  <label class="btn btn-outline btn-sm" for="bannerFileInput"><i class="fa-solid fa-upload"></i> Upload from Device</label>
+                  <label class="btn btn-outline btn-sm" for="bannerCameraInput"><i class="fa-solid fa-camera"></i> Take Photo</label>
+                  <button type="button" class="btn btn-outline btn-sm sf-remove-image" id="removeBannerImage">Remove image</button>
+                  <input id="bannerFileInput" type="file" accept="image/*" hidden>
+                  <input id="bannerCameraInput" type="file" accept="image/*" capture="environment" hidden>
+                </div>
+                <div id="bannerUploadStatus" class="sf-upload-status" role="status"></div>
               </div>
 
               <div class="sf-form-grid-2">
                 <!-- Logo -->
                 <div class="auth-form-group">
-                  <label class="auth-label">Logo / Avatar Image URL</label>
+                  <label class="auth-label">Shop Logo / Avatar</label>
                   <div class="auth-input-wrap">
                     <i class="fa-solid fa-image auth-input-icon"></i>
-                    <input type="url" id="editLogoUrl" class="auth-input" placeholder="https://...">
+                    <input type="url" id="editLogoUrl" class="auth-input" placeholder="Optional image URL">
                   </div>
+                  <img id="logoPreviewImg" class="sf-prod-thumb" src="Logo.jpg" alt="Shop logo preview" style="width:72px;height:72px;margin-top:8px;">
+                  <div class="sf-image-actions" style="margin-top:8px;">
+                    <label class="btn btn-outline btn-sm" for="logoFileInput"><i class="fa-solid fa-upload"></i> Upload from Device</label>
+                    <label class="btn btn-outline btn-sm" for="logoCameraInput"><i class="fa-solid fa-camera"></i> Take Photo</label>
+                    <button type="button" class="btn btn-outline btn-sm sf-remove-image" id="removeLogoImage">Remove image</button>
+                    <input id="logoFileInput" type="file" accept="image/*" hidden>
+                    <input id="logoCameraInput" type="file" accept="image/*" capture="environment" hidden>
+                  </div>
+                  <div id="logoUploadStatus" class="sf-upload-status" role="status"></div>
                 </div>
 
                 <!-- Shop Name -->
@@ -609,6 +655,23 @@
         </div>
         <!-- end panelProfile -->
 
+        <div id="panelGallery" class="sf-panel">
+          <div class="sf-section-card">
+            <div class="sf-section-title"><i class="fa-solid fa-images"></i> Shop Gallery</div>
+            <p style="color:var(--text-muted);margin:-10px 0 18px;">Show customers your storefront, interior, displays, and products.</p>
+            <label class="btn btn-primary btn-sm" for="galleryFileInput"><i class="fa-solid fa-upload"></i> Upload from Device</label>
+            <label class="btn btn-outline btn-sm" for="galleryCameraInput"><i class="fa-solid fa-camera"></i> Take Photo</label>
+            <input id="galleryFileInput" type="file" accept="image/*" multiple hidden>
+            <input id="galleryCameraInput" type="file" accept="image/*" capture="environment" multiple hidden>
+            <div id="galleryPendingPreviews" class="sf-image-previews sf-image-dropzone" role="region" aria-label="Drop photos to add them to the gallery"></div>
+            <button type="button" id="saveGalleryUploads" class="btn btn-business btn-sm" style="display:none;margin:8px 0;">
+              <i class="fa-solid fa-cloud-arrow-up"></i> Save Selected Photos
+            </button>
+            <div id="galleryUploadStatus" class="sf-upload-status" role="status" aria-live="polite"></div>
+            <div id="galleryItems" class="sf-gallery-grid"></div>
+          </div>
+        </div>
+
       </div>
       <!-- end shopHeroSection -->
 
@@ -625,7 +688,7 @@
       </button>
 
       <h3 style="font-family:var(--font-heading);font-size:1.4rem;color:#fff;margin-bottom:20px;">
-        <i class="fa-solid fa-box-open" style="color:var(--accent-cyan);"></i> Add New Product
+        <i class="fa-solid fa-box-open" style="color:var(--accent-cyan);"></i> <span id="productModalTitle">Add New Product</span>
       </h3>
 
       <form id="addProductForm">
@@ -663,7 +726,7 @@
         </div>
 
         <div class="auth-form-group">
-          <label class="auth-label">Product Image URL <span style="color:var(--text-dim);font-size:0.78rem;">Optional</span></label>
+          <label class="auth-label">Product Image URL <span style="color:var(--text-dim);font-size:0.78rem;">Optional alternative</span></label>
           <div class="auth-input-wrap">
             <i class="fa-solid fa-image auth-input-icon"></i>
             <input type="url" id="newProdImg" class="auth-input" placeholder="https://images.unsplash.com/...">
@@ -684,7 +747,7 @@
         </div>
 
         <button type="submit" class="btn btn-primary btn-lg" style="width:100%;margin-top:8px;">
-          <i class="fa-solid fa-paper-plane"></i> Publish to My Storefront
+          <i class="fa-solid fa-paper-plane"></i> <span id="productSubmitLabel">Publish to My Storefront</span>
         </button>
       </form>
     </div>
@@ -802,6 +865,7 @@
   <script src="marketplace-data.js"></script>
   <script src="marketplace-store.js"></script>
   <script src="app.js"></script>
+  <script src="marketplace-images.js"></script>
 
   <script>
   /**
@@ -813,6 +877,14 @@
     let session = null;
     let ownerUser = null;
     let myShop = null;
+    let editingProductId = null;
+    let productImages = [];
+    let productPrimaryImageId = null;
+    let galleryImages = [];
+    let pendingGalleryFiles = [];
+    let selectedBrandingFiles = { logo: null, banner: null };
+    let removedBrandingImages = { logo: false, banner: false };
+    let temporaryPreviewUrls = [];
 
     // ──────────────────────────────────────────────────────────────────
     // BOOT
@@ -839,6 +911,7 @@
       setupTabs();
       setupModals();
       setupForms();
+      setupImageUploads();
     });
 
     // ──────────────────────────────────────────────────────────────────
@@ -884,6 +957,8 @@
       refreshStats();
       renderProductsTable();
       renderOrdersTable();
+      galleryImages = Array.isArray(myShop.gallery_images) ? [...myShop.gallery_images] : [];
+      renderGallery();
       populateProfileForm();
     }
 
@@ -940,7 +1015,7 @@
               <tr>
                 <td>
                   <div style="display:flex;align-items:center;gap:10px;">
-                    <img src="${escHtml((p.image_urls && p.image_urls[0]) || 'Logo.jpg')}" 
+                    <img src="${escHtml(getProductPreviewUrl(p))}"
                          class="sf-prod-thumb" onerror="this.src='Logo.jpg'" alt="${escHtml(p.name)}">
                     <span style="font-weight:700;color:#fff;">${escHtml(p.name)}</span>
                   </div>
@@ -955,6 +1030,9 @@
                   <span class="storefront-status-pill" style="font-size:0.7rem;">${escHtml(p.badge || 'Active')}</span>
                 </td>
                 <td>
+                  <button class="btn btn-outline btn-sm btn-edit-prod" data-id="${escHtml(p.id)}" style="padding:4px 10px;">
+                    <i class="fa-solid fa-pen"></i> Edit
+                  </button>
                   <button class="btn btn-outline btn-sm btn-delete-prod" 
                           data-id="${p.id}" 
                           style="padding:4px 10px;color:#ef4444;border-color:rgba(239,68,68,0.3);">
@@ -967,14 +1045,44 @@
         </table>
       `;
 
+      wrap.querySelectorAll('.btn-edit-prod').forEach(btn => {
+        btn.addEventListener('click', () => openEditProductModal(btn.getAttribute('data-id')));
+      });
+
       wrap.querySelectorAll('.btn-delete-prod').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-id');
           if (confirm('Remove this product from your storefront?')) {
+            const previousProducts = window.MarketplaceStore.getProducts();
+            const removedProduct = window.MarketplaceStore.getProductById(id);
+            if (!removedProduct || removedProduct.shop_id !== myShop.id) return;
+            const previousShop = { ...myShop };
             window.MarketplaceStore.deleteProduct(id);
-            showToast('Product removed from your storefront.');
-            renderProductsTable();
-            refreshStats();
+            let recordSaved = false;
+            try {
+              if (!(await persistCollection('nexovanta_products_db')) ||
+                  !(await persistCollection('nexovanta_shops_db'))) throw new Error('Product removal could not be saved to Supabase.');
+              recordSaved = true;
+              let cleanupMessage = '';
+              try {
+                if (window.NexovantaMarketplaceImages && removedProduct.images) {
+                  await window.NexovantaMarketplaceImages.remove(myShop.id, removedProduct.images);
+                }
+              } catch (cleanupError) {
+                cleanupMessage = ` Some stored images could not be deleted: ${cleanupError.message}`;
+              }
+              showToast(`Product removed from your storefront.${cleanupMessage}`);
+              renderProductsTable();
+              refreshStats();
+            } catch (error) {
+              if (!recordSaved) {
+                localStorage.setItem('nexovanta_products_db', JSON.stringify(previousProducts));
+                await NexovantaDB.syncCollection('nexovanta_products_db', previousProducts);
+                myShop = window.MarketplaceStore.updateShop(previousShop.id, previousShop);
+                await NexovantaDB.syncCollection('nexovanta_shops_db', window.MarketplaceStore.getShops());
+              }
+              showToast(`Could not remove product: ${error.message}`);
+            }
           }
         });
       });
@@ -1085,12 +1193,15 @@
       document.getElementById('awningColorHex').textContent = myShop.awning_color || '#00d2ff';
 
       const bannerPrev = document.getElementById('bannerPreviewImg');
-      if (bannerPrev && myShop.banner_url) bannerPrev.src = myShop.banner_url;
-
       // Banner live preview
-      document.getElementById('editBannerUrl').addEventListener('input', e => {
-        bannerPrev.src = e.target.value || 'Logo.jpg';
-      });
+      if (bannerPrev) bannerPrev.src = (myShop.banner_image && myShop.banner_image.url) || myShop.banner_url || 'Logo.jpg';
+      document.getElementById('logoPreviewImg').src = (myShop.logo_image && myShop.logo_image.url) || myShop.logo_url || 'Logo.jpg';
+      document.getElementById('editBannerUrl').oninput = e => {
+        if (!selectedBrandingFiles.banner) bannerPrev.src = e.target.value || 'Logo.jpg';
+      };
+      document.getElementById('editLogoUrl').oninput = e => {
+        if (!selectedBrandingFiles.logo) document.getElementById('logoPreviewImg').src = e.target.value || 'Logo.jpg';
+      };
       document.getElementById('editAwningColor').addEventListener('input', e => {
         document.getElementById('awningColorHex').textContent = e.target.value;
       });
@@ -1099,6 +1210,335 @@
       if (ownerUser) {
         document.getElementById('ownerNameDisplay').textContent  = ownerUser.full_name || session.username;
         document.getElementById('ownerEmailDisplay').textContent = ownerUser.email || '—';
+      }
+    }
+
+    function setUploadStatus(id, message) {
+      const element = document.getElementById(id);
+      if (element) element.textContent = message || '';
+    }
+
+    async function persistCollection(collection) {
+      if (!NexovantaDB.supabase) return true;
+      return await window.MarketplaceStore.waitForCollectionSync(collection);
+    }
+
+    function getProductPreviewUrl(product) {
+      const images = Array.isArray(product.images) ? product.images : [];
+      const primary = images.find(image => image.id === product.primary_image_id) || images[0];
+      return (primary && (primary.thumbnail_url || primary.url)) ||
+        (product.image_urls && product.image_urls[0]) || 'Logo.jpg';
+    }
+
+    function revokeTemporaryPreviews(urls) {
+      (urls || []).forEach(url => window.NexovantaMarketplaceImages.revokeObjectUrl(url));
+      const revoked = new Set(urls || []);
+      temporaryPreviewUrls = temporaryPreviewUrls.filter(url => !revoked.has(url));
+    }
+
+    function addTemporaryPreview(file) {
+      const url = window.NexovantaMarketplaceImages.createObjectUrl(file);
+      temporaryPreviewUrls.push(url);
+      return url;
+    }
+
+    function renderProductImagePreviews() {
+      const container = document.getElementById('productImagePreviews');
+      if (!container) return;
+      if (!productImages.length) {
+        container.innerHTML = '<p style="grid-column:1/-1;color:var(--text-muted);font-size:.82rem;margin:auto;">Choose photos above or drag and drop them here.</p>';
+        return;
+      }
+      container.innerHTML = productImages.map((image, index) => {
+        const src = image.previewUrl || image.thumbnail_url || image.url || 'Logo.jpg';
+        const selected = image.id === productPrimaryImageId || (!productPrimaryImageId && index === 0);
+        return `<div class="sf-image-preview">
+          <img src="${escHtml(src)}" alt="${escHtml(image.alt_text || 'Product image preview')}">
+          <label><input type="radio" name="productPrimaryImage" data-product-image-id="${escHtml(image.id || '')}" ${selected ? 'checked' : ''}> Primary image</label>
+          <div class="sf-gallery-controls">
+            <button type="button" class="btn btn-outline btn-sm product-image-up" data-index="${index}" aria-label="Move image earlier"><i class="fa-solid fa-arrow-left"></i></button>
+            <button type="button" class="btn btn-outline btn-sm product-image-down" data-index="${index}" aria-label="Move image later"><i class="fa-solid fa-arrow-right"></i></button>
+            <button type="button" class="btn btn-outline btn-sm sf-remove-image product-image-remove" data-index="${index}" aria-label="Remove image"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </div>`;
+      }).join('');
+      container.querySelectorAll('input[name="productPrimaryImage"]').forEach(input => {
+        input.addEventListener('change', () => { productPrimaryImageId = input.getAttribute('data-product-image-id'); });
+      });
+      container.querySelectorAll('.product-image-remove').forEach(button => {
+        button.addEventListener('click', () => {
+          const [removed] = productImages.splice(Number(button.dataset.index), 1);
+          if (removed && removed.previewUrl) {
+            window.NexovantaMarketplaceImages.revokeObjectUrl(removed.previewUrl);
+            temporaryPreviewUrls = temporaryPreviewUrls.filter(url => url !== removed.previewUrl);
+          }
+          if (removed && removed.id === productPrimaryImageId) productPrimaryImageId = productImages[0]?.id || null;
+          renderProductImagePreviews();
+        });
+      });
+      container.querySelectorAll('.product-image-up, .product-image-down').forEach(button => {
+        button.addEventListener('click', () => {
+          const index = Number(button.dataset.index);
+          const target = button.classList.contains('product-image-up') ? index - 1 : index + 1;
+          if (target < 0 || target >= productImages.length) return;
+          [productImages[index], productImages[target]] = [productImages[target], productImages[index]];
+          renderProductImagePreviews();
+        });
+      });
+    }
+
+    function renderPendingGalleryFiles() {
+      const container = document.getElementById('galleryPendingPreviews');
+      const saveButton = document.getElementById('saveGalleryUploads');
+      if (!container) return;
+      if (!pendingGalleryFiles.length) {
+        container.innerHTML = '<p style="grid-column:1/-1;color:var(--text-muted);font-size:.82rem;margin:auto;">Choose photos above or drag and drop them here.</p>';
+        if (saveButton) saveButton.style.display = 'none';
+        return;
+      }
+      container.innerHTML = pendingGalleryFiles.map((item, index) => `
+        <div class="sf-image-preview">
+          <img src="${escHtml(item.previewUrl)}" alt="${item.replaceImageId ? 'Replacement shop photo preview' : 'Selected shop photo'}">
+          ${item.replaceImageId ? '<span style="display:block;color:#fbbf24;font-size:.75rem;margin-top:6px;">Replacement photo</span>' : ''}
+          <input type="text" class="auth-input gallery-pending-caption" data-index="${index}" maxlength="160" placeholder="Photo caption">
+          <button type="button" class="btn btn-outline btn-sm sf-remove-image gallery-pending-remove" data-index="${index}" style="margin-top:8px;">
+            <i class="fa-solid fa-trash"></i> Remove
+          </button>
+        </div>`).join('');
+      if (saveButton) saveButton.style.display = pendingGalleryFiles.length ? 'inline-flex' : 'none';
+      container.querySelectorAll('.gallery-pending-caption').forEach(input => {
+        input.addEventListener('input', () => { pendingGalleryFiles[Number(input.dataset.index)].caption = input.value; });
+      });
+      container.querySelectorAll('.gallery-pending-remove').forEach(button => {
+        button.addEventListener('click', () => {
+          const [removed] = pendingGalleryFiles.splice(Number(button.dataset.index), 1);
+          if (removed) {
+            window.NexovantaMarketplaceImages.revokeObjectUrl(removed.previewUrl);
+            temporaryPreviewUrls = temporaryPreviewUrls.filter(url => url !== removed.previewUrl);
+          }
+          renderPendingGalleryFiles();
+        });
+      });
+    }
+
+    function renderGallery() {
+      const container = document.getElementById('galleryItems');
+      if (!container) return;
+      if (!galleryImages.length) {
+        container.innerHTML = '<div style="grid-column:1/-1;color:var(--text-muted);padding:24px 0;">No shop photos yet. Add a few to help customers recognize your business.</div>';
+        return;
+      }
+      container.innerHTML = galleryImages.map((image, index) => `
+        <article class="sf-gallery-item">
+          <img src="${escHtml(image.thumbnail_url || image.url)}" alt="${escHtml(image.caption || image.alt_text || 'Shop photo')}" loading="lazy">
+          <input type="text" class="auth-input gallery-caption" data-index="${index}" value="${escHtml(image.caption || '')}" maxlength="160" aria-label="Photo caption">
+          <div class="sf-gallery-controls">
+            <button type="button" class="btn btn-outline btn-sm gallery-up" data-index="${index}" aria-label="Move photo earlier"><i class="fa-solid fa-arrow-up"></i></button>
+            <button type="button" class="btn btn-outline btn-sm gallery-down" data-index="${index}" aria-label="Move photo later"><i class="fa-solid fa-arrow-down"></i></button>
+            <label class="btn btn-outline btn-sm" aria-label="Replace photo"><i class="fa-solid fa-rotate"></i><input class="gallery-replace" data-index="${index}" type="file" accept="image/*" hidden></label>
+            <button type="button" class="btn btn-outline btn-sm sf-remove-image gallery-delete" data-index="${index}" aria-label="Delete photo"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </article>`).join('');
+      container.querySelectorAll('.gallery-caption').forEach(input => {
+        input.addEventListener('change', async () => {
+          const index = Number(input.dataset.index);
+          galleryImages[index] = { ...galleryImages[index], caption: input.value.trim() };
+          await saveGalleryState();
+        });
+      });
+      container.querySelectorAll('.gallery-up, .gallery-down').forEach(button => {
+        button.addEventListener('click', async () => {
+          const index = Number(button.dataset.index);
+          const target = button.classList.contains('gallery-up') ? index - 1 : index + 1;
+          if (target < 0 || target >= galleryImages.length) return;
+          [galleryImages[index], galleryImages[target]] = [galleryImages[target], galleryImages[index]];
+          await saveGalleryState();
+        });
+      });
+      container.querySelectorAll('.gallery-delete').forEach(button => {
+        button.addEventListener('click', async () => {
+          const index = Number(button.dataset.index);
+          const [removed] = galleryImages.splice(index, 1);
+          if (!await saveGalleryState()) return;
+          try {
+            await window.NexovantaMarketplaceImages.remove(myShop.id, removed);
+            setUploadStatus('galleryUploadStatus', 'Photo removed from your gallery.');
+          } catch (error) {
+            setUploadStatus('galleryUploadStatus', `Photo removed, but file cleanup failed: ${error.message}`);
+          }
+        });
+      });
+      container.querySelectorAll('.gallery-replace').forEach(input => {
+        input.addEventListener('change', () => {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          const index = Number(input.dataset.index);
+          const oldImage = galleryImages[index];
+          pendingGalleryFiles.push({
+            file,
+            previewUrl: addTemporaryPreview(file),
+            caption: oldImage.caption || '',
+            replaceImageId: oldImage.id
+          });
+          renderPendingGalleryFiles();
+          setUploadStatus('galleryUploadStatus', 'Replacement photo is ready. Save selected photos to apply it.');
+          input.value = '';
+        });
+      });
+    }
+
+    async function saveGalleryState() {
+      const previous = Array.isArray(myShop.gallery_images) ? [...myShop.gallery_images] : [];
+      myShop = window.MarketplaceStore.updateShop(myShop.id, { gallery_images: [...galleryImages] });
+      try {
+        if (!(await persistCollection('nexovanta_shops_db'))) throw new Error('Gallery could not be saved to Supabase.');
+        renderGallery();
+        return true;
+      } catch (error) {
+        galleryImages = previous;
+        myShop = window.MarketplaceStore.updateShop(myShop.id, { gallery_images: previous });
+        renderGallery();
+        setUploadStatus('galleryUploadStatus', error.message);
+        return false;
+      }
+    }
+
+    function setupImageUploads() {
+      const setBrandingFile = (type, input) => {
+        input.addEventListener('change', () => {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          if (selectedBrandingFiles[type] && selectedBrandingFiles[type].previewUrl) {
+            const oldUrl = selectedBrandingFiles[type].previewUrl;
+            window.NexovantaMarketplaceImages.revokeObjectUrl(oldUrl);
+            temporaryPreviewUrls = temporaryPreviewUrls.filter(url => url !== oldUrl);
+          }
+          const previewUrl = addTemporaryPreview(file);
+          selectedBrandingFiles[type] = Object.assign(file, { previewUrl });
+          removedBrandingImages[type] = false;
+          document.getElementById(type === 'logo' ? 'logoPreviewImg' : 'bannerPreviewImg').src = previewUrl;
+          setUploadStatus(`${type}UploadStatus`, `${file.name} ready to upload when you save the shop profile.`);
+          input.value = '';
+        });
+      };
+      setBrandingFile('logo', document.getElementById('logoFileInput'));
+      setBrandingFile('logo', document.getElementById('logoCameraInput'));
+      setBrandingFile('banner', document.getElementById('bannerFileInput'));
+      setBrandingFile('banner', document.getElementById('bannerCameraInput'));
+
+      ['logo', 'banner'].forEach(type => {
+        document.getElementById(type === 'logo' ? 'removeLogoImage' : 'removeBannerImage').addEventListener('click', () => {
+          const chosen = selectedBrandingFiles[type];
+          if (chosen && chosen.previewUrl) {
+            window.NexovantaMarketplaceImages.revokeObjectUrl(chosen.previewUrl);
+            temporaryPreviewUrls = temporaryPreviewUrls.filter(url => url !== chosen.previewUrl);
+          }
+          selectedBrandingFiles[type] = null;
+          removedBrandingImages[type] = true;
+          document.getElementById(type === 'logo' ? 'logoPreviewImg' : 'bannerPreviewImg').src = 'Logo.jpg';
+          document.getElementById(type === 'logo' ? 'editLogoUrl' : 'editBannerUrl').value = '';
+          setUploadStatus(`${type}UploadStatus`, 'Uploaded image will be removed when you save the shop profile.');
+        });
+      });
+
+      const queueProductFiles = files => {
+        Array.from(files || []).forEach(file => {
+          const image = { id: NexovantaDB.uuid(), file, previewUrl: addTemporaryPreview(file), alt_text: file.name };
+          productImages.push(image);
+          if (!productPrimaryImageId) productPrimaryImageId = image.id;
+        });
+        renderProductImagePreviews();
+      };
+      const addProductFiles = input => input.addEventListener('change', () => {
+        queueProductFiles(input.files);
+        input.value = '';
+      });
+      addProductFiles(document.getElementById('productFileInput'));
+      addProductFiles(document.getElementById('productCameraInput'));
+
+      const queueGalleryFiles = files => {
+        Array.from(files || []).forEach(file => pendingGalleryFiles.push({
+          file,
+          previewUrl: addTemporaryPreview(file),
+          caption: ''
+        }));
+        renderPendingGalleryFiles();
+      };
+      const addGalleryFiles = input => input.addEventListener('change', () => {
+        queueGalleryFiles(input.files);
+        input.value = '';
+      });
+      addGalleryFiles(document.getElementById('galleryFileInput'));
+      addGalleryFiles(document.getElementById('galleryCameraInput'));
+      const productDropZone = document.getElementById('productImagePreviews');
+      const galleryDropZone = document.getElementById('galleryPendingPreviews');
+      [productDropZone, galleryDropZone].forEach(zone => {
+        zone.addEventListener('dragover', event => {
+          event.preventDefault();
+          zone.classList.add('sf-image-drop-active');
+        });
+        zone.addEventListener('dragleave', () => zone.classList.remove('sf-image-drop-active'));
+        zone.addEventListener('drop', event => {
+          event.preventDefault();
+          zone.classList.remove('sf-image-drop-active');
+          if (zone === productDropZone) queueProductFiles(event.dataTransfer.files);
+          else queueGalleryFiles(event.dataTransfer.files);
+        });
+      });
+      document.getElementById('saveGalleryUploads').addEventListener('click', uploadGalleryFiles);
+    }
+
+    async function uploadGalleryFiles() {
+      if (!pendingGalleryFiles.length) return;
+      const button = document.getElementById('saveGalleryUploads');
+      button.disabled = true;
+      const uploaded = [];
+      const oldGallery = [...galleryImages];
+      const imagesToReplace = [];
+      let recordSaved = false;
+      try {
+        for (const [imageIndex, item] of pendingGalleryFiles.entries()) {
+          const image = await window.NexovantaMarketplaceImages.upload(myShop.id, 'gallery', item.file, stage => {
+            setUploadStatus('galleryUploadStatus', `Photo ${imageIndex + 1} of ${pendingGalleryFiles.length}: ${stage}`);
+          });
+          image.caption = item.caption || '';
+          uploaded.push(image);
+          if (item.replaceImageId) {
+            const replaceIndex = galleryImages.findIndex(current => current.id === item.replaceImageId);
+            if (replaceIndex < 0) throw new Error('A replacement target was removed before the photo was saved.');
+            imagesToReplace.push(galleryImages[replaceIndex]);
+            galleryImages[replaceIndex] = image;
+          } else {
+            galleryImages.push(image);
+          }
+        }
+        if (!await saveGalleryState()) throw new Error('Gallery upload records could not be saved.');
+        recordSaved = true;
+        pendingGalleryFiles.forEach(item => {
+          window.NexovantaMarketplaceImages.revokeObjectUrl(item.previewUrl);
+          temporaryPreviewUrls = temporaryPreviewUrls.filter(url => url !== item.previewUrl);
+        });
+        pendingGalleryFiles = [];
+        renderPendingGalleryFiles();
+        let cleanupErrorMessage = '';
+        for (const oldImage of imagesToReplace) {
+          try { await window.NexovantaMarketplaceImages.remove(myShop.id, oldImage); }
+          catch (error) { cleanupErrorMessage = error.message; }
+        }
+        if (cleanupErrorMessage) {
+          setUploadStatus('galleryUploadStatus', `Photos saved, but old image cleanup failed: ${cleanupErrorMessage}`);
+          return;
+        }
+        setUploadStatus('galleryUploadStatus', 'Gallery photos saved.');
+      } catch (error) {
+        if (!recordSaved) galleryImages = oldGallery;
+        if (uploaded.length && !recordSaved) {
+          try { await window.NexovantaMarketplaceImages.remove(myShop.id, uploaded); }
+          catch (cleanupError) { setUploadStatus('galleryUploadStatus', `Upload failed; cleanup also failed: ${cleanupError.message}`); }
+        }
+        setUploadStatus('galleryUploadStatus', `Could not upload photos: ${error.message}`);
+      } finally {
+        button.disabled = false;
       }
     }
 
@@ -1122,6 +1562,13 @@
     // MODAL HANDLERS
     // ──────────────────────────────────────────────────────────────────
     function openAddProductModal() {
+      editingProductId = null;
+      productImages = [];
+      productPrimaryImageId = null;
+      renderProductImagePreviews();
+      document.getElementById('productModalTitle').textContent = 'Add New Product';
+      document.getElementById('productSubmitLabel').textContent = 'Publish to My Storefront';
+      document.getElementById('addProductForm').reset();
       document.getElementById('addProductModal').classList.add('active');
       document.body.style.overflow = 'hidden';
     }
@@ -1129,6 +1576,42 @@
       document.getElementById('addProductModal').classList.remove('active');
       document.body.style.overflow = '';
       document.getElementById('addProductForm').reset();
+      const productPreviewUrls = productImages.map(image => image.previewUrl).filter(Boolean);
+      editingProductId = null;
+      productImages = [];
+      renderProductImagePreviews();
+      document.getElementById('productUploadStatus').textContent = '';
+      revokeTemporaryPreviews(productPreviewUrls);
+    }
+
+    function openEditProductModal(productId) {
+      const product = window.MarketplaceStore.getProductById(productId);
+      if (!product || product.shop_id !== myShop.id) return;
+      editingProductId = product.id;
+      const knownImages = Array.isArray(product.images) ? product.images : [];
+      productImages = knownImages.length
+        ? knownImages.map(image => ({ ...image }))
+        : (product.image_urls || []).map((url, index) => ({ id: `legacy-${index}-${product.id}`, url, alt_text: product.name }));
+      if (product.image_urls) {
+        product.image_urls.forEach((url, index) => {
+          if (!productImages.some(image => image.url === url)) {
+            productImages.push({ id: `legacy-${index}-${product.id}`, url, alt_text: product.name });
+          }
+        });
+      }
+      productPrimaryImageId = product.primary_image_id || (productImages[0] && productImages[0].id) || null;
+      document.getElementById('productModalTitle').textContent = 'Edit Product';
+      document.getElementById('productSubmitLabel').textContent = 'Save Product Changes';
+      document.getElementById('newProdName').value = product.name || '';
+      document.getElementById('newProdPrice').value = product.price || '';
+      document.getElementById('newProdStock').value = product.stock_quantity ?? 0;
+      document.getElementById('newProdOriginalPrice').value = product.original_price || '';
+      document.getElementById('newProdImg').value = '';
+      document.getElementById('newProdBadge').value = product.badge || '';
+      document.getElementById('newProdDesc').value = product.description || '';
+      renderProductImagePreviews();
+      document.getElementById('addProductModal').classList.add('active');
+      document.body.style.overflow = 'hidden';
     }
 
     function openCreateShopModal() {
@@ -1228,7 +1711,7 @@
       });
 
       // ── Add Product ──
-      document.getElementById('addProductForm').addEventListener('submit', e => {
+      document.getElementById('addProductForm').addEventListener('submit', async e => {
         e.preventDefault();
         if (!myShop) { showToast('Create your shop first.'); return; }
 
@@ -1245,27 +1728,111 @@
           return;
         }
 
-        window.MarketplaceStore.addProduct(myShop.id, {
-          name,
-          price,
-          stock_quantity: stock,
-          original_price: origPx,
-          image_urls: imgUrl ? [imgUrl] : [],
-          badge: badge || 'New Arrival',
-          description: desc || 'Quality product available in Chuka.'
-        });
+        const submitButton = e.submitter || e.currentTarget.querySelector('[type="submit"]');
+        submitButton.disabled = true;
+        const uploaded = [];
+        let recordSaved = false;
+        const previousProducts = window.MarketplaceStore.getProducts();
+        try {
+          setUploadStatus('productUploadStatus', 'Preparing product photos…');
+          const images = [];
+          for (const [imageIndex, image] of productImages.entries()) {
+            if (image.file) {
+              const stored = await window.NexovantaMarketplaceImages.upload(myShop.id, 'product', image.file, stage => {
+                setUploadStatus('productUploadStatus', `Photo ${imageIndex + 1} of ${productImages.length}: ${stage}`);
+              });
+              uploaded.push(stored);
+              images.push(stored);
+            } else {
+              images.push(image);
+            }
+          }
+          if (imgUrl && !images.some(image => image.url === imgUrl)) {
+            images.push({ id: `url-${Date.now()}`, url: imgUrl, alt_text: name });
+          }
+          const primary = images.find(image => image.id === productPrimaryImageId) || images[0];
+          const orderedImages = primary ? [primary, ...images.filter(image => image !== primary)] : images;
+          const productData = {
+            name,
+            slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+            price,
+            stock_quantity: stock,
+            original_price: origPx,
+            images: orderedImages,
+            image_urls: orderedImages.map(image => image.url),
+            primary_image_id: primary ? primary.id : null,
+            badge: badge || 'New Arrival',
+            description: desc || 'Quality product available in Chuka.'
+          };
 
-        closeAddProdModal();
-        showToast(`✅ "${name}" published to your storefront!`);
-        renderProductsTable();
-        refreshStats();
+          if (editingProductId) {
+            const previousProduct = window.MarketplaceStore.getProductById(editingProductId);
+            const oldImages = (previousProduct && previousProduct.images) || [];
+            window.MarketplaceStore.updateProduct(editingProductId, productData);
+            if (!(await persistCollection('nexovanta_products_db'))) {
+              localStorage.setItem('nexovanta_products_db', JSON.stringify(previousProducts));
+              await NexovantaDB.syncCollection('nexovanta_products_db', previousProducts);
+              throw new Error('Product changes could not be saved to Supabase.');
+            }
+            recordSaved = true;
+            const selectedPreviewUrls = productImages.map(image => image.previewUrl).filter(Boolean);
+            selectedPreviewUrls.forEach(url => window.NexovantaMarketplaceImages.revokeObjectUrl(url));
+            temporaryPreviewUrls = temporaryPreviewUrls.filter(url => !selectedPreviewUrls.includes(url));
+            const retainedPaths = new Set(orderedImages.flatMap(image => [image.path, image.thumbnail_path]).filter(Boolean));
+            const removed = oldImages.filter(image =>
+              (image.path && !retainedPaths.has(image.path)) ||
+              (image.thumbnail_path && !retainedPaths.has(image.thumbnail_path))
+            );
+            if (removed.length) await window.NexovantaMarketplaceImages.remove(myShop.id, removed);
+            showToast(`"${name}" updated.`);
+          } else {
+            const previousShop = { ...myShop };
+            const added = window.MarketplaceStore.addProduct(myShop.id, productData);
+            try {
+              if (!(await persistCollection('nexovanta_products_db'))) throw new Error('Product could not be saved to Supabase.');
+              if (!(await persistCollection('nexovanta_shops_db'))) throw new Error('Shop product count could not be saved to Supabase.');
+              recordSaved = true;
+            } catch (error) {
+              localStorage.setItem('nexovanta_products_db', JSON.stringify(previousProducts));
+              await NexovantaDB.syncCollection('nexovanta_products_db', previousProducts);
+              window.MarketplaceStore.updateShop(previousShop.id, previousShop);
+              await NexovantaDB.syncCollection('nexovanta_shops_db', window.MarketplaceStore.getShops());
+              throw error;
+            }
+            showToast(`"${added.name}" published to your storefront!`);
+          }
+          closeAddProdModal();
+          renderProductsTable();
+          refreshStats();
+        } catch (error) {
+          if (uploaded.length && !recordSaved) {
+            try { await window.NexovantaMarketplaceImages.remove(myShop.id, uploaded); }
+            catch (cleanupError) { showToast(`Upload cleanup failed: ${cleanupError.message}`); }
+          }
+          if (recordSaved) {
+            closeAddProdModal();
+            renderProductsTable();
+            showToast(`Product saved, but old image cleanup failed: ${error.message}`);
+          } else {
+            setUploadStatus('productUploadStatus', error.message || 'Product image upload failed.');
+            showToast(`Could not save product: ${error.message}`);
+          }
+        } finally {
+          submitButton.disabled = false;
+        }
       });
 
       // ── Save Shop Profile ──
-      document.getElementById('shopProfileForm').addEventListener('submit', e => {
+      document.getElementById('shopProfileForm').addEventListener('submit', async e => {
         e.preventDefault();
         if (!myShop) return;
 
+        const previousShop = { ...myShop };
+        const uploaded = [];
+        let recordSaved = false;
+        const submitButton = e.submitter || e.currentTarget.querySelector('[type="submit"]');
+        submitButton.disabled = true;
+        try {
         const updates = {
           name:          document.getElementById('editShopName').value.trim()    || myShop.name,
           tagline:       document.getElementById('editTagline').value.trim(),
@@ -1275,12 +1842,35 @@
           opening_hours: document.getElementById('editHours').value.trim(),
           phone:         document.getElementById('editPhone').value.trim(),
           whatsapp_number: document.getElementById('editWhatsApp').value.trim(),
-          logo_url:      document.getElementById('editLogoUrl').value.trim(),
-          banner_url:    document.getElementById('editBannerUrl').value.trim(),
+          logo_url:      document.getElementById('editLogoUrl').value.trim() || myShop.logo_url,
+          banner_url:    document.getElementById('editBannerUrl').value.trim() || myShop.banner_url,
           category_id:   document.getElementById('editCategory').value,
           district_id:   document.getElementById('editDistrict').value,
           awning_color:  document.getElementById('editAwningColor').value,
         };
+
+        for (const type of ['logo', 'banner']) {
+          const selectedFile = selectedBrandingFiles[type];
+          const oldImage = myShop[`${type}_image`];
+          const manualUrl = document.getElementById(type === 'logo' ? 'editLogoUrl' : 'editBannerUrl').value.trim();
+          if (selectedFile) {
+            setUploadStatus(`${type}UploadStatus`, 'Uploading optimized image…');
+            const stored = await window.NexovantaMarketplaceImages.upload(myShop.id, 'branding', selectedFile, stage => {
+              setUploadStatus(`${type}UploadStatus`, stage);
+            }, { aspectRatio: type === 'logo' ? 1 : 16 / 9 });
+            uploaded.push(stored);
+            updates[`${type}_image`] = stored;
+            updates[`${type}_url`] = stored.url;
+          } else if (removedBrandingImages[type]) {
+            updates[`${type}_image`] = null;
+            updates[`${type}_url`] = '';
+          } else if (manualUrl && manualUrl !== (oldImage && oldImage.url)) {
+            updates[`${type}_image`] = null;
+            updates[`${type}_url`] = manualUrl;
+          } else {
+            updates[`${type}_image`] = oldImage || null;
+          }
+        }
 
         // Recompute slug if name changed
         if (updates.name !== myShop.name) {
@@ -1288,12 +1878,44 @@
         }
 
         myShop = window.MarketplaceStore.updateShop(myShop.id, updates);
-
+        if (!(await persistCollection('nexovanta_shops_db'))) throw new Error('Shop profile could not be saved to Supabase.');
+        recordSaved = true;
+        Object.values(selectedBrandingFiles).forEach(file => {
+          if (file && file.previewUrl) {
+            window.NexovantaMarketplaceImages.revokeObjectUrl(file.previewUrl);
+            temporaryPreviewUrls = temporaryPreviewUrls.filter(url => url !== file.previewUrl);
+          }
+        });
+        selectedBrandingFiles = { logo: null, banner: null };
+        removedBrandingImages = { logo: false, banner: false };
+        const replacedBranding = ['logo', 'banner']
+          .map(type => previousShop[`${type}_image`])
+          .filter(image => image && ![myShop.logo_image, myShop.banner_image].some(current => current && current.path === image.path));
+        if (replacedBranding.length) await window.NexovantaMarketplaceImages.remove(myShop.id, replacedBranding);
         showToast('✅ Shop profile saved! Changes are now live in the marketplace.');
         showShopDashboard(); // re-render hero with new data
 
         // Switch to products tab to show updated shop
         document.querySelector('.sf-tab-btn[data-tab="products"]').click();
+        } catch (error) {
+          if (!recordSaved && myShop && previousShop) {
+            window.MarketplaceStore.updateShop(previousShop.id, previousShop);
+            await NexovantaDB.syncCollection('nexovanta_shops_db', window.MarketplaceStore.getShops());
+          }
+          if (uploaded.length && !recordSaved) {
+            try { await window.NexovantaMarketplaceImages.remove(previousShop.id, uploaded); }
+            catch (cleanupError) { showToast(`Upload cleanup failed: ${cleanupError.message}`); }
+          }
+          if (!recordSaved) {
+            myShop = previousShop;
+            showToast(`Could not save shop profile: ${error.message}`);
+          } else {
+            showShopDashboard();
+            showToast(`Shop profile saved, but old image cleanup failed: ${error.message}`);
+          }
+        } finally {
+          submitButton.disabled = false;
+        }
       });
     }
 

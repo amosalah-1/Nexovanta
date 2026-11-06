@@ -25,6 +25,12 @@ The current full schema includes the publishing protections. Existing Supabase p
 
 Follow creation and its new-follower notification are inserted together by the `nexovanta_follow_profile` database function, which derives the follower from the signed-in Supabase user. This prevents a second client-side write from failing notification RLS after the follow itself has already succeeded. If following or notification creation fails with an RLS or missing-function error, rerun the full `supabase-schema.sql` in the SQL Editor for the correct Supabase project so the current functions and policies are installed.
 
+### Marketplace shop images
+
+For an existing Supabase project, run `supabase-migrations/20261106_marketplace_shop_media.sql` once in the SQL Editor before enabling merchant uploads. It creates/reuses the public `shop-media` bucket (8 MB limit; JPEG/WebP objects) and installs public-read plus shop-owner-only insert/update/delete Storage policies. The policies use the existing `nexovanta_current_user_owns_shop` function and the first path segment as the shop ID. Do not make the bucket private or broaden the write policies; public storefronts load published shop images directly from their public URLs.
+
+The merchant dashboard compresses photos in the browser, stores full images and WebP thumbnails in Storage, and saves the public URLs and Storage paths in existing shop/product JSON records. No marketplace tables or migrations to existing shop/product records are required. Uploads require Supabase to be configured and the signed-in user's shop ownership to be represented by its `owner_id`; URL-based product and branding images remain available. If installing from scratch, the full `supabase-schema.sql` also creates the bucket and policies.
+
 ## 3. Promote the initial administrator
 
 Register the first account through Nexovanta, confirm its email if required, then run this in the SQL Editor, replacing the username:

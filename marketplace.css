@@ -1741,4 +1741,71 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
+  .shop-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+  }
+
+  .shop-gallery-card {
+    display: block;
+    overflow: hidden;
+    padding: 0;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    color: #fff;
+    text-align: left;
+    cursor: zoom-in;
+  }
+
+  .shop-gallery-card img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    transition: transform .25s ease;
+  }
+
+  .shop-gallery-card:hover img { transform: scale(1.035); }
+  .shop-gallery-caption { display: block; padding: 12px 14px; color: #cbd5e1; font-size: .88rem; }
+
+  .shop-gallery-viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 48px;
+    background: rgba(2, 6, 18, .94);
+  }
+
+  .shop-gallery-viewer.active { display: flex; }
+  .shop-gallery-viewer figure { max-width: min(1100px, 90vw); max-height: 88vh; margin: 0; text-align: center; }
+  .shop-gallery-viewer img { display: block; max-width: 100%; max-height: 78vh; margin: auto; object-fit: contain; }
+  .shop-gallery-viewer figcaption { color: #fff; padding-top: 12px; }
+  .gallery-viewer-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--border-light);
+    border-radius: 50%;
+    background: rgba(255,255,255,.12);
+    color: #fff;
+    cursor: pointer;
+  }
+  .gallery-viewer-prev { left: 18px; }
+  .gallery-viewer-next { right: 18px; }
+
+  @media (max-width: 640px) {
+    .shop-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .shop-gallery-viewer { padding: 24px 12px; }
+    .gallery-viewer-prev { left: 4px; }
+    .gallery-viewer-next { right: 4px; }
+  }
 }

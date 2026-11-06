@@ -18,16 +18,25 @@
 
   class MarketplaceStore {
     constructor() {
+      this.pendingCollectionWrites = new Map();
       this.initStorage();
       this.linkOwnersByNexovantaDB();
     }
 
     saveCollection(key, records) {
-      if (window.NexovantaDB && typeof window.NexovantaDB.syncCollection === 'function') {
-        window.NexovantaDB.syncCollection(key, records);
+      const database = typeof NexovantaDB !== 'undefined' ? NexovantaDB : window.NexovantaDB;
+      if (database && typeof database.syncCollection === 'function') {
+        const write = database.syncCollection(key, records);
+        this.pendingCollectionWrites.set(key, write);
+        return write;
       } else {
         localStorage.setItem(key, JSON.stringify(records));
+        return Promise.resolve(true);
       }
+    }
+
+    waitForCollectionSync(key) {
+      return this.pendingCollectionWrites.get(key) || Promise.resolve(true);
     }
 
     /**
@@ -249,6 +258,9 @@
         is_featured: false,
         logo_url: shopData.logo_url || 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=300&q=80',
         banner_url: shopData.banner_url || 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1200&q=80',
+        logo_image: null,
+        banner_image: null,
+        gallery_images: [],
         storefront_style: 'standard-shop',
         awning_color: shopData.awning_color || '#00d2ff',
         accent_color: shopData.accent_color || '#0284c7',
@@ -359,13 +371,16 @@
         original_price: productData.original_price ? Number(productData.original_price) : null,
         category_id: productData.category_id || (shop ? shop.category_id : 'all'),
         district_id: shop ? shop.district_id : 'tech',
-        stock_quantity: Number(productData.stock_quantity) || 10,
+        stock_quantity: Number.isFinite(Number(productData.stock_quantity))
+          ? Number(productData.stock_quantity)
+          : 10,
         badge: productData.badge || 'New Arrival',
         rating: 5.0,
         review_count: 0,
         image_urls: productData.image_urls && productData.image_urls.length
           ? productData.image_urls
           : ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80'],
+        images: Array.isArray(productData.images) ? productData.images : [],
         description: productData.description || 'Quality product available in Chuka.',
         variants: productData.variants || {},
         features: productData.features || ['Local Pickup or Delivery', 'Verified Quality'],
