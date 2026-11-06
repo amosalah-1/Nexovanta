@@ -1331,6 +1331,7 @@
         <button class="filter-chip" data-filter="today"><i class="fa-solid fa-sun"></i> Today</button>
         <button class="filter-chip" data-filter="week"><i class="fa-solid fa-calendar-week"></i> This Week</button>
         <button class="filter-chip" data-filter="month"><i class="fa-solid fa-calendar"></i> This Month</button>
+        <button class="filter-chip" data-filter="past"><i class="fa-solid fa-clock-rotate-left"></i> Past Events</button>
         <button class="filter-chip" data-filter="campus"><i class="fa-solid fa-graduation-cap"></i> Campus</button>
         <button class="filter-chip" data-filter="community"><i class="fa-solid fa-people-roof"></i> Community</button>
         <button class="filter-chip" data-filter="business"><i class="fa-solid fa-store"></i> Business</button>
@@ -1456,6 +1457,11 @@
           </div>
         </div>
 
+        <div class="event-owner-actions" id="eventOwnerActions" style="display:none;">
+          <button type="button" class="btn btn-outline btn-sm" id="editOwnedEventBtn"><i class="fa-solid fa-pen"></i> Edit Event</button>
+          <button type="button" class="btn btn-outline btn-sm" id="cancelOwnedEventBtn"><i class="fa-solid fa-ban"></i> Cancel Event</button>
+        </div>
+
         <!-- Footer Actions: External Reg, Share, Save -->
         <div class="detail-actions-row">
           <a href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary" id="detailRegisterLink" style="display:none; flex: 1;">
@@ -1483,7 +1489,7 @@
 
       <div class="form-header">
         <span class="hero-badge-tag"><i class="fa-solid fa-calendar-plus"></i> Organise</span>
-        <h3>Create a Community Event</h3>
+        <h3 id="formEventTitle">Create a Community Event</h3>
         <p>Publish an event for Chuka University students, Ndagani businesses, or local residents.</p>
       </div>
 
@@ -1535,13 +1541,18 @@
           <!-- Venue & Location -->
           <div class="form-grid-2">
             <div class="form-group">
-              <label class="form-label" for="inputEventVenue">Venue Name *</label>
-              <input type="text" id="inputEventVenue" class="form-control" placeholder="e.g. University Main Hall or Ndagani Grounds" required>
+              <label class="form-label" for="inputEventVenue">Physical Venue</label>
+              <input type="text" id="inputEventVenue" class="form-control" placeholder="e.g. University Main Hall or Ndagani Grounds">
             </div>
             <div class="form-group">
-              <label class="form-label" for="inputEventLocation">Location / Address *</label>
-              <input type="text" id="inputEventLocation" class="form-control" placeholder="e.g. Ndagani, Gate A, Chuka" required>
+              <label class="form-label" for="inputEventLocation">Location / Address</label>
+              <input type="text" id="inputEventLocation" class="form-control" placeholder="e.g. Ndagani, Gate A, Chuka">
             </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inputMeetingUrl">Online Meeting Link (for online events)</label>
+            <input type="url" id="inputMeetingUrl" class="form-control" placeholder="https://meet.example.com/...">
           </div>
 
           <!-- Free / Paid Toggle -->
@@ -1578,7 +1589,7 @@
             </div>
           </div>
 
-          <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: 10px;">
+          <button type="submit" class="btn btn-primary btn-lg" id="submitEventButton" style="width: 100%; margin-top: 10px;">
             <i class="fa-solid fa-paper-plane"></i> Publish Community Event
           </button>
         </div>
@@ -1596,6 +1607,7 @@
       let currentFilter = 'upcoming';
       let searchQuery = '';
       let activeDetailEventId = null;
+      let editingEventId = null;
       let coverImageBase64 = null;
 
       // 1. Session Setup & Resilient User Detection
@@ -1604,6 +1616,18 @@
 
       // 2. Initial Render of Events
       renderEvents();
+
+      window.setTimeout(() => {
+        const params = new URLSearchParams(window.location.search);
+        const requestedEventId = params.get('event');
+        if (requestedEventId) window.openDetailModal(requestedEventId);
+        if (params.get('create') === '1') {
+          params.delete('create');
+          const query = params.toString();
+          window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+          triggerCreate();
+        }
+      }, 0);
 
       // 3. Search Bar listener
       const searchInput = document.getElementById('eventsSearchInput');
@@ -1670,6 +1694,11 @@
         fileInput.addEventListener('change', (e) => {
           const file = e.target.files[0];
           if (file) {
+            if (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) {
+              fileInput.value = '';
+              showToast('Choose an image no larger than 5 MB.');
+              return;
+            }
             const reader = new FileReader();
             reader.onload = (evt) => {
               coverImageBase64 = evt.target.result;
@@ -1678,6 +1707,7 @@
                 previewImg.style.display = 'block';
               }
             };
+            reader.onerror = () => showToast('Could not read the selected event image.');
             reader.readAsDataURL(file);
           }
         });
@@ -1700,6 +1730,7 @@
           const category = document.getElementById('selectEventCategory').value;
           const venue = document.getElementById('inputEventVenue').value.trim();
           const location = document.getElementById('inputEventLocation').value.trim();
+          const meeting_url = document.getElementById('inputMeetingUrl').value.trim();
           const start_at = document.getElementById('inputStartAt').value;
           const end_at = document.getElementById('inputEndAt').value;
           const is_free = checkIsFree.checked;
@@ -1707,43 +1738,88 @@
           const registration_url = document.getElementById('inputRegUrl').value.trim();
           const contact = document.getElementById('inputEventContact').value.trim();
 
-          if (!title || !description || !venue || !location || !start_at || !end_at) {
-            showToast('Please fill in all required fields.');
+          if (!title || !description || !start_at || !end_at || (!venue && !meeting_url)) {
+            showToast('Add a title, description, schedule, and a physical venue or online meeting link.');
+            return;
+          }
+          const startIso = toNairobiIso(start_at);
+          const endIso = toNairobiIso(end_at);
+          if (!startIso || !endIso || new Date(endIso) <= new Date(startIso)) {
+            showToast('The event end time must be after its start time.');
+            return;
+          }
+          if ((meeting_url && !getSafeExternalUrl(meeting_url)) ||
+              (registration_url && !getSafeExternalUrl(registration_url))) {
+            showToast('Meeting and registration links must use http or https.');
             return;
           }
 
-          const newEvent = NexovantaDB.Events.create({
-            organiser_id: user.id,
-            organiser_username: user.username,
+          const eventData = {
             title,
             description,
             category,
             venue,
             location,
-            start_at: new Date(start_at).toISOString(),
-            end_at: new Date(end_at).toISOString(),
+            meeting_url,
+            start_at: startIso,
+            end_at: endIso,
             is_free,
             price,
             registration_url,
             contact,
-            cover_image_url: coverImageBase64
-          });
-
-          // Auto-mark organiser as going
-          NexovantaDB.EventRSVPs.upsert(newEvent.id, user.id, 'going');
-
-          showToast('Event published successfully! 🎉');
+            cover_image_url: coverImageBase64 || (editingEventId && NexovantaDB.Events.getById(editingEventId)?.cover_image_url) || null
+          };
+          if (editingEventId) {
+            const updated = NexovantaDB.Events.update(editingEventId, eventData, user.id);
+            if (!updated || updated.error) {
+              showToast(updated?.error || 'Could not update this event.');
+              return;
+            }
+            showToast('Event updated successfully.');
+          } else {
+            const newEvent = NexovantaDB.Events.create({
+              ...eventData,
+              organiser_id: user.id,
+              organiser_username: user.username,
+            });
+            NexovantaDB.EventRSVPs.upsert(newEvent.id, user.id, 'going');
+            showToast('Event published successfully! 🎉');
+          }
+          editingEventId = null;
           closeCreateModal();
           createForm.reset();
           if (previewImg) previewImg.style.display = 'none';
           coverImageBase64 = null;
           renderEvents();
+          if (activeDetailEventId) window.openDetailModal(activeDetailEventId);
         });
       }
 
       // 9. Close Modal triggers
       document.getElementById('closeCreateModalBtn')?.addEventListener('click', closeCreateModal);
       document.getElementById('closeDetailModalBtn')?.addEventListener('click', closeDetailModal);
+      document.getElementById('editOwnedEventBtn')?.addEventListener('click', () => {
+        const eventToEdit = activeDetailEventId && NexovantaDB.Events.getById(activeDetailEventId);
+        const user = getCurrentUser();
+        if (!eventToEdit || !user ||
+            (eventToEdit.organiser_id !== user.id && !['admin', 'moderator'].includes(user.account_role))) {
+          showToast('You can only edit events you manage.');
+          return;
+        }
+        openCreateModal(eventToEdit);
+      });
+      document.getElementById('cancelOwnedEventBtn')?.addEventListener('click', () => {
+        const user = getCurrentUser();
+        if (!activeDetailEventId || !user) return;
+        if (!window.confirm('Cancel this event? It will be removed from upcoming events and the community feed.')) return;
+        if (!NexovantaDB.Events.delete(activeDetailEventId, user.id)) {
+          showToast('You can only cancel events you manage.');
+          return;
+        }
+        closeDetailModal();
+        renderEvents();
+        showToast('Event cancelled.');
+      });
       document.getElementById('createEventModal')?.addEventListener('click', (e) => {
         if (e.target.id === 'createEventModal') closeCreateModal();
       });
@@ -1774,15 +1850,19 @@
 
       // 11. Detail Share Button
       document.getElementById('detailShareBtn')?.addEventListener('click', () => {
+        const eventUrl = new URL(window.location.href);
+        if (activeDetailEventId) eventUrl.searchParams.set('event', activeDetailEventId);
         const shareData = {
           title: document.getElementById('detailTitle').textContent,
           text: `Check out this event on Nexovanta Chuka Community!`,
-          url: window.location.href
+          url: eventUrl.href
         };
         if (navigator.share) {
-          navigator.share(shareData).catch(() => {});
+          navigator.share(shareData).catch(error => {
+            if (error.name !== 'AbortError') showToast('Could not share this event.');
+          });
         } else {
-          navigator.clipboard?.writeText(window.location.href);
+          navigator.clipboard?.writeText(eventUrl.href);
           showToast('Event link copied to clipboard! 🔗');
         }
       });
@@ -1865,10 +1945,13 @@
           const startDate = new Date(event.start_at);
 
           if (currentFilter === 'upcoming') {
-            return startDate >= new Date(Date.now() - 3600000 * 4); // upcoming or active recently
+            return startDate >= new Date(Date.now() - 3600000 * 4) && event.status === 'published';
+          }
+          if (currentFilter === 'past') {
+            return startDate < new Date(Date.now() - 3600000 * 4) && event.status === 'published';
           }
           if (currentFilter === 'today') {
-            return startDate.toDateString() === now.toDateString();
+            return getNairobiDateKey(startDate) === getNairobiDateKey(now);
           }
           if (currentFilter === 'week') {
             const sevenDaysLater = new Date(now.getTime() + 7 * 86400000);
@@ -2003,6 +2086,20 @@
             </div>
           `;
         }).join('');
+        container.querySelectorAll('.event-card').forEach(card => {
+          card.tabIndex = 0;
+          card.setAttribute('aria-label', `Open details for ${card.querySelector('.event-title')?.textContent || 'event'}`);
+          card.addEventListener('click', event => {
+            if (event.target.closest('a, button')) return;
+            window.openDetailModal(card.dataset.id);
+          });
+          card.addEventListener('keydown', event => {
+            if (event.target === card && (event.key === 'Enter' || event.key === ' ')) {
+              event.preventDefault();
+              window.openDetailModal(card.dataset.id);
+            }
+          });
+        });
       }
 
       // Reset filters global helper
@@ -2036,7 +2133,11 @@
       window.openDetailModal = function(eventId) {
         activeDetailEventId = eventId;
         const ev = NexovantaDB.Events.getById(eventId);
-        if (!ev) return;
+        if (!ev || ev.status === 'deleted') return;
+        const eventUrl = new URL(window.location.href);
+        eventUrl.searchParams.set('event', eventId);
+        eventUrl.searchParams.delete('create');
+        window.history.replaceState(null, '', eventUrl);
 
         const modal = document.getElementById('eventDetailModal');
         const user = getCurrentUser();
@@ -2073,6 +2174,10 @@
         document.getElementById('detailStartAt').textContent = NexovantaDB.Events.formatDateNairobi(ev.start_at);
         document.getElementById('detailEndAt').textContent = NexovantaDB.Events.formatDateNairobi(ev.end_at);
         document.getElementById('detailVenueLocation').textContent = `${ev.venue} (${ev.location})`;
+        const meetingUrl = getSafeExternalUrl(ev.meeting_url);
+        if (meetingUrl) {
+          document.getElementById('detailVenueLocation').innerHTML = `${escapeHtml(ev.venue || 'Online event')} (${escapeHtml(ev.location || 'Online')}) · <a href="${escapeHtml(meetingUrl)}" target="_blank" rel="noopener noreferrer">Join online</a>`;
+        }
         document.getElementById('detailDescription').textContent = ev.description;
 
         // Organiser
@@ -2101,8 +2206,9 @@
 
         // External Registration Link
         const regLink = document.getElementById('detailRegisterLink');
-        if (ev.registration_url) {
-          regLink.href = ev.registration_url;
+        const registrationUrl = getSafeExternalUrl(ev.registration_url);
+        if (registrationUrl) {
+          regLink.href = registrationUrl;
           regLink.style.display = 'inline-flex';
         } else {
           regLink.style.display = 'none';
@@ -2119,6 +2225,8 @@
 
         // Update RSVP button state
         updateDetailRsvpState(ev.id, user?.id);
+        const canManage = !!user && (ev.organiser_id === user.id || ['admin', 'moderator'].includes(user.account_role));
+        document.getElementById('eventOwnerActions').style.display = canManage ? 'flex' : 'none';
 
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
@@ -2144,30 +2252,92 @@
         activeDetailEventId = null;
       }
 
-      function openCreateModal() {
+      function openCreateModal(eventToEdit = null) {
         const modal = document.getElementById('createEventModal');
+        const form = document.getElementById('createEventForm');
+        editingEventId = eventToEdit?.id || null;
+        coverImageBase64 = null;
+        if (form) form.reset();
+        document.getElementById('inputEventTitle').value = eventToEdit?.title || '';
+        document.getElementById('inputEventDesc').value = eventToEdit?.description || '';
+        document.getElementById('selectEventCategory').value = eventToEdit?.category || 'campus';
+        document.getElementById('inputEventContact').value = eventToEdit?.contact || '';
+        document.getElementById('inputEventVenue').value = eventToEdit?.venue || '';
+        document.getElementById('inputEventLocation').value = eventToEdit?.location || '';
+        document.getElementById('inputMeetingUrl').value = eventToEdit?.meeting_url || '';
+        document.getElementById('inputRegUrl').value = eventToEdit?.registration_url || '';
+        document.getElementById('checkIsFree').checked = eventToEdit ? eventToEdit.is_free : true;
+        document.getElementById('inputEventPrice').value = eventToEdit?.price || '';
+        document.getElementById('priceInputGroup').style.display = eventToEdit && !eventToEdit.is_free ? 'block' : 'none';
+        document.getElementById('formEventTitle').textContent = eventToEdit ? 'Edit Community Event' : 'Create a Community Event';
+        document.getElementById('submitEventButton').innerHTML = eventToEdit
+          ? '<i class="fa-solid fa-floppy-disk"></i> Save Event'
+          : '<i class="fa-solid fa-calendar-check"></i> Publish Event';
+        const preview = document.getElementById('coverPreviewImg');
+        if (preview) {
+          preview.src = eventToEdit?.cover_image_url || '';
+          preview.style.display = eventToEdit?.cover_image_url ? 'block' : 'none';
+        }
         // Preset default start date to tomorrow 10:00
-        const tomorrow = new Date(Date.now() + 86400000);
-        tomorrow.setHours(10, 0, 0, 0);
+        const parts = getNairobiDateTimeParts(new Date());
+        const tomorrow = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day) + 1, 10, 0));
         const endTomorrow = new Date(tomorrow.getTime() + 3 * 3600000);
-
-        const formatIsoInput = (d) => {
-          const pad = n => String(n).padStart(2, '0');
-          return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-        };
 
         const startInput = document.getElementById('inputStartAt');
         const endInput = document.getElementById('inputEndAt');
-        if (startInput && !startInput.value) startInput.value = formatIsoInput(tomorrow);
-        if (endInput && !endInput.value) endInput.value = formatIsoInput(endTomorrow);
+        if (startInput) startInput.value = eventToEdit?.start_at ? formatDateTimeInput(eventToEdit.start_at) : formatUtcDateTimeInput(tomorrow);
+        if (endInput) endInput.value = eventToEdit?.end_at ? formatDateTimeInput(eventToEdit.end_at) : formatUtcDateTimeInput(endTomorrow);
 
+        document.getElementById('eventDetailModal')?.classList.remove('active');
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
       }
 
       function closeCreateModal() {
         document.getElementById('createEventModal')?.classList.remove('active');
+        editingEventId = null;
         document.body.style.overflow = '';
+      }
+
+      function formatDateTimeInput(value) {
+        const parts = getNairobiDateTimeParts(new Date(value));
+        return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+      }
+
+      function getNairobiDateTimeParts(value) {
+        return Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Africa/Nairobi',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hourCycle: 'h23'
+        }).formatToParts(value).map(part => [part.type, part.value]));
+      }
+
+      function formatUtcDateTimeInput(value) {
+        return value.toISOString().slice(0, 16);
+      }
+
+      function toNairobiIso(value) {
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return null;
+        const date = new Date(`${value}:00+03:00`);
+        return Number.isNaN(date.getTime()) ? null : date.toISOString();
+      }
+
+      function getNairobiDateKey(value) {
+        const parts = getNairobiDateTimeParts(value);
+        return `${parts.year}-${parts.month}-${parts.day}`;
+      }
+
+      function getSafeExternalUrl(value) {
+        try {
+          const url = new URL(value);
+          return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+        } catch {
+          return '';
+        }
       }
 
       // Notifications helper

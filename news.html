@@ -671,6 +671,11 @@
       border: 1px solid #f59e0b;
       color: #fcd34d;
     }
+    .status-badge.rejected {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+    }
 
     .news-card-body {
       padding: 18px;
@@ -1659,6 +1664,11 @@
             </select>
           </div>
 
+          <div class="form-group">
+            <label class="form-label" for="newsLocationInput">Relevant Location (Optional)</label>
+            <input type="text" id="newsLocationInput" class="form-control" placeholder="e.g. Chuka University, Ndagani, or Chuka Town">
+          </div>
+
           <!-- Article Body (Min 100 Characters) -->
           <div class="form-group">
             <label class="form-label" for="newsBodyInput">
@@ -1714,6 +1724,17 @@
       // 2. Initial Render
       renderNews();
       renderSidebarStats();
+      window.setTimeout(() => {
+        const params = new URLSearchParams(window.location.search);
+        const articleId = params.get('article');
+        if (articleId) window.openDetailModal(articleId);
+        if (params.get('submit') === '1') {
+          params.delete('submit');
+          const query = params.toString();
+          window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+          triggerSubmitNews();
+        }
+      }, 0);
 
       // 3. Search Bar listener
       const globalSearch = document.getElementById('globalNavSearch');
@@ -1772,6 +1793,11 @@
         fileInput.addEventListener('change', (e) => {
           const file = e.target.files[0];
           if (file) {
+            if (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) {
+              fileInput.value = '';
+              showToast('Choose an image no larger than 5 MB.');
+              return;
+            }
             const reader = new FileReader();
             reader.onload = (evt) => {
               newsCoverBase64 = evt.target.result;
@@ -1780,6 +1806,7 @@
                 previewImg.style.display = 'block';
               }
             };
+            reader.onerror = () => showToast('Could not read the selected article image.');
             reader.readAsDataURL(file);
           }
         });
@@ -1800,6 +1827,7 @@
           const headline = document.getElementById('newsHeadlineInput').value.trim();
           const category = document.getElementById('newsCategorySelect').value;
           const body = document.getElementById('newsBodyInput').value.trim();
+          const location = document.getElementById('newsLocationInput').value.trim();
           const source_url = document.getElementById('newsSourceUrl').value.trim();
 
           if (!headline || !body) {
@@ -1810,9 +1838,10 @@
             showToast('Article body must be at least 100 characters.');
             return;
           }
-
-          // If user is admin/moderator, auto-publish, otherwise pending
-          const status = isModeratorOrAdmin ? 'published' : 'pending';
+          if (source_url && !getSafeExternalUrl(source_url)) {
+            showToast('Supporting links must use http or https.');
+            return;
+          }
 
           NexovantaDB.News.create({
             author_username: user.username,
@@ -1820,16 +1849,12 @@
             headline,
             body,
             category,
+            location,
             source_url,
-            cover_image_url: newsCoverBase64,
-            status
+            cover_image_url: newsCoverBase64
           });
 
-          if (status === 'published') {
-            showToast('News published immediately! 📰');
-          } else {
-            showToast('News submitted! Awaiting moderator review. ⏳');
-          }
+          showToast('News submitted! Awaiting moderator review. ⏳');
 
           closeSubmitModal();
           submitForm.reset();
@@ -1935,8 +1960,12 @@
       document.getElementById('btnModApprove')?.addEventListener('click', () => {
         const user = getCurrentUser();
         if (activeArticleId && user) {
-          NexovantaDB.News.moderate(activeArticleId, 'published', user.username, 'Approved via News Review Panel');
-          showToast('Article published to community! ✅');
+        const result = NexovantaDB.News.moderate(activeArticleId, 'published', user.username, 'Approved via News Review Panel');
+        if (!result || result.error) {
+          showToast(result?.error || 'Could not publish this article.');
+          return;
+        }
+        showToast('Article published to community! ✅');
           openDetailModal(activeArticleId);
           renderNews();
           renderSidebarStats();
@@ -1946,7 +1975,11 @@
       document.getElementById('btnModReject')?.addEventListener('click', () => {
         const user = getCurrentUser();
         if (activeArticleId && user) {
-          NexovantaDB.News.moderate(activeArticleId, 'rejected', user.username, 'Rejected via News Review Panel');
+          const result = NexovantaDB.News.moderate(activeArticleId, 'rejected', user.username, 'Rejected via News Review Panel');
+          if (!result || result.error) {
+            showToast(result?.error || 'Could not reject this article.');
+            return;
+          }
           showToast('Article rejected.');
           closeDetailModal();
           renderNews();
@@ -2060,6 +2093,9 @@
           business: 'fa-store', sports: 'fa-futbol', culture: 'fa-masks-theater', lostfound: 'fa-magnifying-glass-location'
         };
         const featIcon = featCatIcons[featured.category] || 'fa-newspaper';
+        const featuredStatusHtml = featured.status !== 'published'
+          ? `<span class="status-badge ${featured.status}" style="position:static;">${featured.status === 'rejected' ? 'Not Approved' : 'Pending Review'}</span>`
+          : '';
 
         const featCoverHtml = featured.cover_image_url
           ? `<img src="${featured.cover_image_url}" class="featured-cover-img" alt="${escapeHtml(featured.headline)}">`
@@ -2070,7 +2106,7 @@
             <div class="featured-cover-box">
               ${featCoverHtml}
               <div class="featured-tag-badge">
-                <i class="fa-solid fa-star"></i> Featured Community Story
+                <i class="fa-solid fa-star"></i> ${featured.status === 'published' ? 'Featured Community Story' : 'News Submission'}
               </div>
               <span class="card-category-badge ${featured.category}" style="top:16px; right:16px; left:auto;">
                 ${featured.category}
@@ -2080,8 +2116,8 @@
               <div class="featured-meta-row">
                 <span>By <a href="profile.html?user=${encodeURIComponent(featured.author_username)}" class="author-handle-link" onclick="event.stopPropagation()">@${escapeHtml(featured.author_username)}</a></span>
                 <span>•</span>
-                <span><i class="fa-regular fa-clock"></i> ${NexovantaDB.timeAgo(featured.created_at)}</span>
-                ${featured.status === 'pending' ? `<span class="status-badge pending" style="position:static;">Pending Review</span>` : ''}
+                <span><i class="fa-regular fa-clock"></i> ${NexovantaDB.timeAgo(featured.published_at || featured.created_at)}</span>
+                ${featuredStatusHtml}
               </div>
 
               <h2 class="featured-title">${escapeHtml(featured.headline)}</h2>
@@ -2114,8 +2150,8 @@
             ? `<img src="${art.cover_image_url}" class="news-card-img" alt="${escapeHtml(art.headline)}" onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'news-placeholder ${art.category}\\'><i class=\\'fa-solid ${cardIcon}\\'></i></div>';">`
             : `<div class="news-placeholder ${art.category}"><i class="fa-solid ${cardIcon}"></i></div>`;
 
-          const statusBadgeHtml = (art.status === 'pending' || isModeratorOrAdmin)
-            ? `<span class="status-badge ${art.status}">${art.status === 'published' ? 'Published' : 'Pending'}</span>`
+          const statusBadgeHtml = art.status !== 'published'
+            ? `<span class="status-badge ${art.status}">${art.status === 'rejected' ? 'Not Approved' : 'Pending Review'}</span>`
             : '';
 
           return `
@@ -2134,7 +2170,7 @@
                   <div class="author-meta">
                     <a href="profile.html?user=${encodeURIComponent(art.author_username)}" class="author-handle-link" onclick="event.stopPropagation()">@${escapeHtml(art.author_username)}</a>
                     <span>•</span>
-                    <span>${NexovantaDB.timeAgo(art.created_at)}</span>
+                    <span>${NexovantaDB.timeAgo(art.published_at || art.created_at)}</span>
                   </div>
 
                   <button class="btn-read-more" onclick="event.stopPropagation(); openDetailModal('${art.id}')">
@@ -2149,12 +2185,25 @@
 
       // Open Article Detail Modal
       window.openDetailModal = function(articleId) {
-        activeArticleId = articleId;
+        activeArticleId = null;
         const art = NexovantaDB.News.getById(articleId);
-        if (!art) return;
+        const user = getCurrentUser();
+        if (!art) {
+          showToast('This article is unavailable or still awaiting review.');
+          return;
+        }
+        if (art.status !== 'published' &&
+            !(user && (art.author_id === user.id || ['admin', 'moderator'].includes(user.account_role)))) {
+          showToast('This article is not available until it has been approved.');
+          return;
+        }
+        activeArticleId = articleId;
+        const articleUrl = new URL(window.location.href);
+        articleUrl.searchParams.set('article', articleId);
+        articleUrl.searchParams.delete('submit');
+        window.history.replaceState(null, '', articleUrl);
 
         const modal = document.getElementById('articleDetailModal');
-        const user = getCurrentUser();
 
         // Cover
         const coverBox = document.getElementById('detailModalCover');
@@ -2174,7 +2223,9 @@
 
         const statusBadge = document.getElementById('detailModalStatus');
         statusBadge.className = `status-badge ${art.status}`;
-        statusBadge.textContent = art.status === 'published' ? 'Published' : 'Pending Review';
+        statusBadge.textContent = art.status === 'published'
+          ? 'Published'
+          : art.status === 'rejected' ? 'Not Approved' : 'Pending Review';
 
         document.getElementById('detailModalHeadline').textContent = art.headline;
 
@@ -2188,15 +2239,16 @@
         authorHandle.textContent = `@${art.author_username}`;
         authorHandle.href = `profile.html?user=${encodeURIComponent(art.author_username)}`;
 
-        document.getElementById('detailModalDate').innerHTML = `<i class="fa-regular fa-clock"></i> ${NexovantaDB.timeAgo(art.created_at)}`;
+        document.getElementById('detailModalDate').innerHTML = `<i class="fa-regular fa-clock"></i> ${NexovantaDB.timeAgo(art.published_at || art.created_at)}`;
         document.getElementById('detailModalBody').textContent = art.body;
 
         // Source URL
         const sourceBox = document.getElementById('detailModalSourceBox');
         const sourceLink = document.getElementById('detailModalSourceLink');
-        if (art.source_url) {
-          sourceLink.href = art.source_url;
-          sourceLink.textContent = art.source_url;
+        const sourceUrl = getSafeExternalUrl(art.source_url);
+        if (sourceUrl) {
+          sourceLink.href = sourceUrl;
+          sourceLink.textContent = sourceUrl;
           sourceBox.style.display = 'block';
         } else {
           sourceBox.style.display = 'none';
@@ -2269,6 +2321,15 @@
         document.body.style.overflow = '';
       }
 
+      function getSafeExternalUrl(value) {
+        try {
+          const url = new URL(value);
+          return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+        } catch {
+          return '';
+        }
+      }
+
       // Sidebar Statistics & Breaking News list
       function renderSidebarStats() {
         const allArticles = NexovantaDB.News.getAll();
@@ -2285,7 +2346,7 @@
                 <div class="breaking-top">
                   <span class="pulse-dot-red"></span>
                   <span style="color:var(--accent-cyan); text-transform:uppercase; font-weight:700;">${b.category}</span>
-                  <span style="color:var(--text-dim);">• ${NexovantaDB.timeAgo(b.created_at)}</span>
+                  <span style="color:var(--text-dim);">• ${NexovantaDB.timeAgo(b.published_at || b.created_at)}</span>
                 </div>
                 <div class="breaking-headline">${escapeHtml(b.headline)}</div>
               </div>

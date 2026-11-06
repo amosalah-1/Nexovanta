@@ -1100,7 +1100,7 @@ const NexovantaDB = (() => {
       return Events.getAll().filter(e => new Date(e.start_at) >= new Date() && e.status === 'published');
     },
 
-    getById(id) { return readAll(KEYS.EVENTS).find(e => e.id === id) || null; },
+    getById(id) { return readAll(KEYS.EVENTS).find(e => e.id === id && e.status !== 'deleted') || null; },
 
     create(data) {
       const events = readAll(KEYS.EVENTS);
@@ -1115,6 +1115,7 @@ const NexovantaDB = (() => {
         category: data.category || 'community', // campus | community | business | sports | culture
         venue: data.venue || '',
         location: data.location || '',
+        meeting_url: data.meeting_url || '',
         start_at: data.start_at,
         end_at: data.end_at,
         timezone: 'Africa/Nairobi',
@@ -1205,6 +1206,14 @@ const NexovantaDB = (() => {
       }
 
       return rsvps.find(r => r.event_id === eventId && r.user_id === userId);
+    },
+
+    remove(eventId, userId) {
+      const rsvps = readAll(KEYS.EVENT_RSVPS);
+      const remaining = rsvps.filter(r => !(r.event_id === eventId && r.user_id === userId));
+      if (remaining.length === rsvps.length) return false;
+      writeAll(KEYS.EVENT_RSVPS, remaining);
+      return true;
     },
   };
 
@@ -1303,8 +1312,10 @@ const NexovantaDB = (() => {
         body: data.body,
         cover_image_url: data.cover_image_url || null,
         category: data.category || 'community',
+        location: data.location || '',
         source_url: data.source_url || '',
-        status: data.status || 'pending', // pending | published | rejected
+        status: 'pending',
+        published_at: null,
         moderation_note: '',
         reviewed_by: null,
         created_at: now(),
@@ -1316,10 +1327,20 @@ const NexovantaDB = (() => {
     },
 
     moderate(id, status, moderatorUsername, note = '') {
+      const session = Session.get();
+      if (!session || !['admin', 'moderator'].includes(session.account_role)) return { error: 'Unauthorized' };
+      if (!['published', 'rejected'].includes(status)) return { error: 'Invalid moderation status' };
       const articles = readAll(KEYS.NEWS);
       const idx = articles.findIndex(a => a.id === id);
       if (idx === -1) return null;
-      articles[idx] = { ...articles[idx], status, moderation_note: note, reviewed_by: moderatorUsername, updated_at: now() };
+      articles[idx] = {
+        ...articles[idx],
+        status,
+        published_at: status === 'published' ? now() : null,
+        moderation_note: note,
+        reviewed_by: moderatorUsername,
+        updated_at: now()
+      };
       writeAll(KEYS.NEWS, articles);
 
       // Notify author

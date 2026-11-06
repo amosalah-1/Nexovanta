@@ -235,28 +235,21 @@
       <div class="feed-composer-card">
         <div class="feed-composer-top">
           <div id="composerUserAvatar"></div>
-          <button id="openComposerTrigger" class="feed-composer-trigger-btn">
+          <button id="openComposerTrigger" class="feed-composer-trigger-btn" type="button" aria-haspopup="dialog">
             <span id="composerPlaceholderText">What's happening in Chuka?</span>
             <i class="fa-solid fa-pen-to-square" style="color: var(--accent-cyan);"></i>
           </button>
         </div>
 
-        <div class="feed-composer-actions">
-          <button class="feed-composer-action-btn photo" id="actionBtnPhoto">
-            <i class="fa-solid fa-image"></i>
-            <span>Photo</span>
+        <div class="feed-composer-actions publishing-options" aria-label="Choose what to publish">
+          <button class="feed-composer-action-btn post" type="button" data-publish-choice="post">
+            <i class="fa-solid fa-message"></i><span>Post</span>
           </button>
-          <button class="feed-composer-action-btn video" id="actionBtnVideo">
-            <i class="fa-solid fa-video"></i>
-            <span>Video</span>
+          <button class="feed-composer-action-btn event" type="button" data-publish-choice="event">
+            <i class="fa-solid fa-calendar-days"></i><span>Event</span>
           </button>
-          <button class="feed-composer-action-btn news" id="actionBtnNews">
-            <i class="fa-solid fa-newspaper"></i>
-            <span>News</span>
-          </button>
-          <button class="feed-composer-action-btn event" id="actionBtnEvent">
-            <i class="fa-solid fa-calendar-plus"></i>
-            <span>Event</span>
+          <button class="feed-composer-action-btn news" type="button" data-publish-choice="news">
+            <i class="fa-solid fa-newspaper"></i><span>News</span>
           </button>
         </div>
       </div>
@@ -332,7 +325,7 @@
         <div class="feed-empty-icon"><i class="fa-solid fa-comments"></i></div>
         <h3 class="feed-empty-title">No Discussions Found</h3>
         <p class="feed-empty-text">Be the first to share an update, hostel alert, campus notice, or business deal with Chuka!</p>
-        <button class="btn btn-primary btn-md" onclick="openComposerModal()">
+        <button class="btn btn-primary btn-md" onclick="openPostComposer()">
           <i class="fa-solid fa-pen"></i> Create a Post
         </button>
       </div>
@@ -406,7 +399,7 @@
       <i class="fa-solid fa-magnifying-glass"></i>
       <span>Search</span>
     </button>
-    <button class="feed-mobile-nav-create-btn" id="mobileCreateTrigger" title="Create Post">
+    <button class="feed-mobile-nav-create-btn" id="mobileCreateTrigger" title="Create" aria-haspopup="dialog">
       <i class="fa-solid fa-plus"></i>
     </button>
     <a href="events.html" class="feed-mobile-nav-link">
@@ -426,6 +419,35 @@
   <!-- =================================================================
        MODALS
        ================================================================= -->
+
+  <div id="createTypeModal" class="feed-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="createTypeTitle">
+    <div class="feed-modal-card create-type-card">
+      <div class="feed-modal-header">
+        <span class="feed-modal-title" id="createTypeTitle"><i class="fa-solid fa-circle-plus" style="color:var(--accent-cyan);"></i> Create something</span>
+        <button class="feed-modal-close-btn" type="button" id="closeCreateTypeModal" aria-label="Close">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <p class="create-type-intro">Choose the right format for your community update.</p>
+      <div class="create-type-options">
+        <button class="create-type-option" type="button" data-publish-choice="post">
+          <span class="create-type-icon post"><i class="fa-solid fa-message"></i></span>
+          <span><strong>Create a Post</strong><small>Share an update, photo, video, question, or discussion.</small></span>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+        <button class="create-type-option" type="button" data-publish-choice="event">
+          <span class="create-type-icon event"><i class="fa-solid fa-calendar-days"></i></span>
+          <span><strong>Create an Event</strong><small>Publish an event with schedule, venue, and RSVP details.</small></span>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+        <button class="create-type-option" type="button" data-publish-choice="news">
+          <span class="create-type-icon news"><i class="fa-solid fa-newspaper"></i></span>
+          <span><strong>Submit News</strong><small>Send a community story for moderator review.</small></span>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- 1. Post Composer Modal -->
   <div id="composerModal" class="feed-modal-backdrop">
@@ -452,7 +474,7 @@
           </div>
 
           <!-- Text Area -->
-          <textarea id="composerContentInput" class="feed-modal-textarea" placeholder="What's happening in Chuka? Share news, hostel announcements, study groups, campus alerts, or business deals..." required></textarea>
+          <textarea id="composerContentInput" class="feed-modal-textarea" placeholder="Share an update, question, or discussion with the community..." required></textarea>
           <div class="feed-modal-char-counter">
             <span id="composerCharCount">0</span>/2000
           </div>
@@ -465,8 +487,7 @@
                 <option value="campus">🎓 Campus Life</option>
                 <option value="community">🏘️ Town Community</option>
                 <option value="business">💼 Local Business</option>
-                <option value="news">📢 Official News</option>
-                <option value="event">📅 Community Event</option>
+                <option value="general">💬 General Discussion</option>
               </select>
             </div>
 
@@ -669,6 +690,7 @@
       // 10. Global Keyboard Shortcuts (Escape to close modals)
       window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
+          closeCreateTypeModal();
           closeComposerModal();
           closeCommentModal();
           closeReportModal();
@@ -1130,22 +1152,21 @@
     // ─── 5. Post Composer Engine ───────────────────────────────────────────────
     function initComposerHandlers() {
       // Open triggers
-      document.getElementById('openComposerTrigger')?.addEventListener('click', () => openComposerModal());
+      document.getElementById('openComposerTrigger')?.addEventListener('click', openCreateTypeModal);
       document.getElementById('actionBtnPhoto')?.addEventListener('click', () => {
-        openComposerModal();
+        openPostComposer();
         document.getElementById('mediaPhotoInput')?.click();
       });
       document.getElementById('actionBtnVideo')?.addEventListener('click', () => {
-        openComposerModal();
+        openPostComposer();
         document.getElementById('mediaVideoInput')?.click();
       });
-      document.getElementById('actionBtnNews')?.addEventListener('click', () => {
-        openComposerModal();
-        document.getElementById('composerCategorySelect').value = 'news';
+      document.querySelectorAll('[data-publish-choice]').forEach(button => {
+        button.addEventListener('click', () => openPublishChoice(button.dataset.publishChoice));
       });
-      document.getElementById('actionBtnEvent')?.addEventListener('click', () => {
-        openComposerModal();
-        document.getElementById('composerCategorySelect').value = 'event';
+      document.getElementById('closeCreateTypeModal')?.addEventListener('click', closeCreateTypeModal);
+      document.getElementById('createTypeModal')?.addEventListener('click', event => {
+        if (event.target.id === 'createTypeModal') closeCreateTypeModal();
       });
 
       // Internal media attach buttons
@@ -1182,14 +1203,37 @@
       });
     }
 
-    function openComposerModal() {
+    function openCreateTypeModal() {
+      document.getElementById('createTypeModal')?.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeCreateTypeModal() {
+      document.getElementById('createTypeModal')?.classList.remove('active');
+      if (!document.querySelector('.feed-modal-backdrop.active')) document.body.style.overflow = '';
+    }
+
+    function openPublishChoice(type) {
+      closeCreateTypeModal();
+      if (type === 'post') {
+        openPostComposer();
+      } else if (type === 'event') {
+        window.location.href = 'events.html?create=1';
+      } else if (type === 'news') {
+        window.location.href = 'news.html?submit=1';
+      }
+    }
+
+    window.openPostComposer = function() {
       const modal = document.getElementById('composerModal');
       if (modal) {
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
         setTimeout(() => document.getElementById('composerContentInput')?.focus(), 150);
       }
-    }
+    };
+
+    window.openComposerModal = openCreateTypeModal;
 
     function closeComposerModal() {
       const modal = document.getElementById('composerModal');
@@ -1273,8 +1317,6 @@
       let postType = 'text';
       if (composerMediaFiles.some(m => m.type === 'video')) postType = 'video';
       else if (composerMediaFiles.length > 0) postType = 'image';
-      else if (category === 'news') postType = 'news';
-      else if (category === 'event') postType = 'event';
 
       const newPost = NexovantaDB.Posts.create({
         author_username: currentUser.username,
@@ -1311,43 +1353,57 @@
 
     // ─── 6. Feed Rendering Engine ──────────────────────────────────────────────
     function getFilteredPosts() {
-      let posts = NexovantaDB.Posts.getAll();
+      let posts = NexovantaDB.Posts.getAll().map(post => ({ ...post, feed_type: 'post' }));
+      if (currentTab !== 'videos' && currentTab !== 'saved') {
+        posts = posts.concat(
+          NexovantaDB.Events.getAll()
+            .filter(event => event.status === 'published')
+            .map(event => ({ ...event, feed_type: 'event', created_at: event.created_at || event.start_at }))
+        );
+        posts = posts.concat(
+          NexovantaDB.News.getAll()
+            .filter(article => article.status === 'published')
+            .map(article => ({ ...article, feed_type: 'news', created_at: article.published_at || article.created_at }))
+        );
+      }
 
       // Apply Filter Tabs
       if (currentTab === 'latest') {
         posts = posts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       } else if (currentTab === 'following') {
         const followingIds = new Set(NexovantaDB.Follows.getFollowingIds(currentUser.id));
-        posts = posts.filter(post => followingIds.has(String(post.author_id)));
+        posts = posts.filter(post => post.feed_type === 'post' && followingIds.has(String(post.author_id)));
       } else if (currentTab === 'news') {
-        posts = posts.filter(p => p.post_type === 'news' || p.category === 'news');
+        posts = posts.filter(p => p.feed_type === 'news');
       } else if (currentTab === 'videos') {
-        posts = posts.filter(p => p.post_type === 'video' || p.media?.some(m => m.type === 'video'));
+        posts = posts.filter(p => p.feed_type === 'post' && (p.post_type === 'video' || p.media?.some(m => m.type === 'video')));
       } else if (currentTab === 'events') {
-        posts = posts.filter(p => p.post_type === 'event' || p.category === 'event');
+        posts = posts.filter(p => p.feed_type === 'event');
       } else if (currentTab === 'campus') {
-        posts = posts.filter(p => p.category === 'campus');
+        posts = posts.filter(p => p.feed_type === 'post' && p.category === 'campus');
       } else if (currentTab === 'community') {
-        posts = posts.filter(p => p.category === 'community');
+        posts = posts.filter(p => p.feed_type === 'post' && p.category === 'community');
       } else if (currentTab === 'business') {
-        posts = posts.filter(p => p.category === 'business');
+        posts = posts.filter(p => p.feed_type === 'post' && p.category === 'business');
       } else if (currentTab === 'saved') {
         const savedMap = NexovantaDB.SavedPosts.getByUser(currentUser.id);
         const savedIds = new Set(savedMap.map(p => p.id));
-        posts = posts.filter(p => savedIds.has(p.id));
+        posts = posts.filter(p => p.feed_type === 'post' && savedIds.has(p.id));
       }
 
       // Apply Search Query
       if (searchQuery) {
-        posts = posts.filter(p =>
-          p.content.toLowerCase().includes(searchQuery) ||
-          p.author_username.toLowerCase().includes(searchQuery) ||
-          (p.location && p.location.toLowerCase().includes(searchQuery)) ||
-          p.hashtags?.some(h => h.toLowerCase().includes(searchQuery))
-        );
+        posts = posts.filter(p => {
+          const searchable = p.feed_type === 'event'
+            ? [p.title, p.description, p.venue, p.location, p.organiser_username, p.category]
+            : p.feed_type === 'news'
+              ? [p.headline, p.body, p.location, p.author_username, p.category]
+              : [p.content, p.author_username, p.location, ...(p.hashtags || [])];
+          return searchable.some(value => String(value || '').toLowerCase().includes(searchQuery));
+        });
       }
 
-      return posts;
+      return posts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
 
     function renderFeed(reset = false) {
@@ -1382,7 +1438,27 @@
         emptyState.classList.remove('show');
         container.style.display = 'flex';
 
-        container.innerHTML = paginated.map(post => createPostCardHtml(post)).join('');
+        container.innerHTML = paginated.map(item => createFeedItemHtml(item)).join('');
+        container.querySelectorAll('.event-card-feed, .news-card-feed').forEach(card => {
+          card.tabIndex = 0;
+          card.setAttribute(
+            'aria-label',
+            card.classList.contains('event-card-feed')
+              ? `Open event: ${card.querySelector('h2')?.textContent || 'community event'}`
+              : `Read article: ${card.querySelector('h2')?.textContent || 'community news'}`
+          );
+          card.addEventListener('click', event => {
+            if (event.target.closest('a, button')) return;
+            const link = card.querySelector('.feed-special-cover-link, h2 a');
+            if (link) window.location.href = link.href;
+          });
+          card.addEventListener('keydown', event => {
+            if (event.target !== card || (event.key !== 'Enter' && event.key !== ' ')) return;
+            event.preventDefault();
+            const link = card.querySelector('.feed-special-cover-link, h2 a');
+            if (link) window.location.href = link.href;
+          });
+        });
 
         if (hasMore) {
           loadMoreWrap.style.display = 'block';
@@ -1391,6 +1467,74 @@
         }
       }, reset ? 150 : 0);
     }
+
+    function createFeedItemHtml(item) {
+      if (item.feed_type === 'event') return createEventFeedCardHtml(item);
+      if (item.feed_type === 'news') return createNewsFeedCardHtml(item);
+      return createPostCardHtml(item);
+    }
+
+    function createEventFeedCardHtml(event) {
+      const date = NexovantaDB.Events.formatDateNairobi(event.start_at);
+      const venue = event.meeting_url ? 'Online event' : [event.venue, event.location].filter(Boolean).join(' · ');
+      const cover = event.cover_image_url
+        ? `<img class="feed-special-cover" src="${event.cover_image_url}" alt="${escapeHtml(event.title)}">`
+        : `<div class="feed-special-placeholder event"><i class="fa-solid fa-calendar-days"></i></div>`;
+      const going = currentUser && NexovantaDB.EventRSVPs.get(event.id, currentUser.id)?.response === 'going';
+      return `
+        <article class="feed-special-card event-card-feed">
+          <div class="feed-special-label"><i class="fa-solid fa-calendar-days"></i> Community Event</div>
+          <a class="feed-special-cover-link" href="events.html?event=${encodeURIComponent(event.id)}">${cover}</a>
+          <div class="feed-special-body">
+            <h2><a href="events.html?event=${encodeURIComponent(event.id)}">${escapeHtml(event.title)}</a></h2>
+            <div class="feed-special-meta"><span><i class="fa-regular fa-clock"></i> ${escapeHtml(date)}</span><span><i class="fa-solid fa-location-dot"></i> ${escapeHtml(venue || 'Details on event page')}</span></div>
+            <p>${escapeHtml(event.description || '')}</p>
+            <div class="feed-special-footer">
+              <span>Organized by <a href="profile.html?user=${encodeURIComponent(event.organiser_username || '')}">@${escapeHtml(event.organiser_username || 'community')}</a></span>
+              <div><button class="feed-special-rsvp ${going ? 'active' : ''}" type="button" onclick="handleFeedEventRsvp(event, '${event.id}')">${going ? 'Going' : 'RSVP'}</button>
+                <a class="feed-special-link" href="events.html?event=${encodeURIComponent(event.id)}">View Event</a></div>
+            </div>
+          </div>
+        </article>`;
+    }
+
+    function createNewsFeedCardHtml(article) {
+      const cover = article.cover_image_url
+        ? `<img class="feed-special-cover" src="${article.cover_image_url}" alt="${escapeHtml(article.headline)}">`
+        : `<div class="feed-special-placeholder news"><i class="fa-solid fa-newspaper"></i></div>`;
+      return `
+        <article class="feed-special-card news-card-feed">
+          <div class="feed-special-label"><i class="fa-solid fa-newspaper"></i> Community News</div>
+          <a class="feed-special-cover-link" href="news.html?article=${encodeURIComponent(article.id)}">${cover}</a>
+          <div class="feed-special-body">
+            <div class="feed-special-category">${escapeHtml(article.category || 'community')}</div>
+            <h2><a href="news.html?article=${encodeURIComponent(article.id)}">${escapeHtml(article.headline)}</a></h2>
+            <p>${escapeHtml(article.body || '').slice(0, 260)}${(article.body || '').length > 260 ? '…' : ''}</p>
+            <div class="feed-special-footer">
+              <span>By <a href="profile.html?user=${encodeURIComponent(article.author_username || '')}">@${escapeHtml(article.author_username || 'community')}</a> · ${escapeHtml(NexovantaDB.timeAgo(article.published_at || article.created_at))}</span>
+              <a class="feed-special-link" href="news.html?article=${encodeURIComponent(article.id)}">Read More</a>
+            </div>
+          </div>
+        </article>`;
+    }
+
+    window.handleFeedEventRsvp = function(event, eventId) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!currentUser) {
+        window.location.href = 'login.html';
+        return;
+      }
+      const existing = NexovantaDB.EventRSVPs.get(eventId, currentUser.id);
+      if (existing?.response === 'going') {
+        NexovantaDB.EventRSVPs.remove(eventId, currentUser.id);
+        showToast('Your RSVP was cancelled.');
+      } else {
+        NexovantaDB.EventRSVPs.upsert(eventId, currentUser.id, 'going');
+        showToast('You are going to this event!');
+      }
+      renderFeed(false);
+    };
 
     function createPostCardHtml(post) {
       const author = NexovantaDB.Users.getByUsername(post.author_username) || {
